@@ -1,0 +1,21 @@
+node_modules/
+dist/
+build/
+
+# sqlite databases (local / runtime data)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+*.log
+.DS_Store
+
+# env files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# vercel
+.vercel

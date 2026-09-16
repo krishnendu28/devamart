@@ -1,0 +1,14 @@
+{
+  "name": "devamart",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DevaMart - Puja & Astrology e-commerce platform (user store + admin panel + API)",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client-user install && npm --prefix client-admin install",
+    "setup": "npm --prefix server run seed",
+    "server": "npm --prefix server run dev",
+    "user": "npm --prefix client-user run dev",
+    "admin": "npm --prefix client-admin run dev",
+    "test": "npm --prefix server run seed && npm --prefix server test"
+  }
+}
