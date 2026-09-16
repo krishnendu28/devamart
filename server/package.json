@@ -1,0 +1,27 @@
+{
+  "name": "devamart-server",
+  "version": "1.0.0",
+  "description": "DevaMart - Puja & Astrology E-commerce API server",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js",
+    "seed": "node src/seed.js",
+    "seed:demo": "node seed-demo-orders.js",
+    "test": "node test-api.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^13.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "razorpay": "^2.9.8",
+    "socket.io": "^4.7.5",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}
