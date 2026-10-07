@@ -32,7 +32,7 @@ export default function Activity() {
 
   return (
     <>
-      <div className="cards" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="cards">
         {[
           { lbl: 'Total events', val: counts.total, ic: 'activity', cls: 'blue' },
           { lbl: 'Successful logins', val: counts.success, ic: 'check_ok', cls: 'green' },

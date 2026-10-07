@@ -8,7 +8,9 @@
     "dev": "node src/index.js",
     "seed": "node src/seed.js",
     "seed:demo": "node seed-demo-orders.js",
-    "test": "node test-api.js"
+    "test": "node test-api.js",
+    "ai-test": "node ai-test.js",
+    "beta-test": "node beta-test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
