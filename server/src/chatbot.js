@@ -75,7 +75,7 @@ const KB = [
   {
     id: 'contact',
     keys: ['contact', 'support', 'help', 'call', 'phone', 'email', 'whatsapp', 'helpline'],
-    answer: 'You can reach us at support@devamart.in or on WhatsApp +91 90000 00000, 9 AM – 8 PM IST. You can also use the Contact Us page to send us a message and we will reply within one working day.',
+    answer: 'You can reach us at support@devamart.in or on WhatsApp +91 90381 50556, 9 AM – 8 PM IST. You can also use the Contact Us page to send us a message and we will reply within one working day.',
   },
   {
     id: 'muhurat',
@@ -94,7 +94,7 @@ const KB = [
   },
 ];
 
-const FALLBACK = 'I am not fully sure about that yet, but our team can help. You can ask me about puja kits, idols, rudraksha, healing crystals, prices, delivery, COD/online payment, order tracking or returns. Or reach us at support@devamart.in / WhatsApp +91 90000 00000.';
+const FALLBACK = 'I am not fully sure about that yet, but our team can help. You can ask me about puja kits, idols, rudraksha, healing crystals, prices, delivery, COD/online payment, order tracking or returns. Or reach us at support@devamart.in / WhatsApp +91 90381 50556.';
 
 function score(message, keys) {
   const text = message.toLowerCase();

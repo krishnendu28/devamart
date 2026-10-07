@@ -163,10 +163,12 @@ async function main() {
 
   section('Orders (COD)');
   const address = { name: 'Test Bhakt', phone: '9876543210', line: '12 Temple Street, Near Mandir, Bengaluru', city: 'Bengaluru', state: 'Karnataka', pincode: '560001' };
-  const codOrder = await req('POST', '/api/orders', { token: userToken, body: { address, paymentMethod: 'cod' } });
+  const codOrder = await req('POST', '/api/orders', { token: userToken, body: { address, paymentMethod: 'cod', note: 'Please deliver after 6 PM' } });
   ok('POST /api/orders COD', codOrder.status === 201 && codOrder.data.order.order_no.startsWith('DM'), codOrder.data);
   const codId = codOrder.data.order.id;
   ok('COD order payment_status pending', codOrder.data.order.payment_status === 'pending');
+  ok('customer note saved on order', codOrder.data.order.note === 'Please deliver after 6 PM', codOrder.data.order);
+  ok('order created with ready-for-dispatch status flow', codOrder.data.order.status === 'placed');
   ok('free shipping above 499', codOrder.data.order.shipping === 0 || codOrder.data.order.subtotal < 499);
 
   const emptyCartOrder = await req('POST', '/api/orders', { token: userToken, body: { address, paymentMethod: 'cod' } });
@@ -185,7 +187,8 @@ async function main() {
   ok('user cannot fetch order with non-user token -> 403', otherUserOrder.status === 403);
 
   const track = await req('GET', `/api/orders/track/${codOrder.data.order.order_no}`);
-  ok('public track endpoint', track.status === 200 && track.data.progress.length === 5 && track.data.progress[0].reached === true, track.data);
+  ok('public track endpoint', track.status === 200 && track.data.progress.length === 6 && track.data.progress[0].reached === true, track.data);
+  ok('track exposes Ready for Dispatch step', track.data.progress.some(s => s.status === 'ready' && s.label === 'Ready for Dispatch'), track.data.progress);
   const trackBad = await req('GET', '/api/orders/track/DMNOPEQ');
   ok('unknown order number 404', trackBad.status === 404);
 
@@ -194,8 +197,9 @@ async function main() {
 
   section('Orders (Online payment)');
   await req('POST', '/api/cart', { token: userToken, body: { productId: prods.data[1].id, qty: 1 } });
-  const onlineOrder = await req('POST', '/api/orders', { token: userToken, body: { address, paymentMethod: 'online' } });
+  const onlineOrder = await req('POST', '/api/orders', { token: userToken, body: { address, paymentMethod: 'online', upiApp: 'phonepe', note: 'Gift wrap please' } });
   ok('POST /api/orders online', onlineOrder.status === 201 && onlineOrder.data.order.payment_url, onlineOrder.data);
+  ok('upi app + note accepted on online order', onlineOrder.data.order.note === 'Gift wrap please', onlineOrder.data.order);
   const onlineId = onlineOrder.data.order.id;
 
   const init = await req('POST', '/api/payment/init', { token: userToken, body: { orderId: onlineId } });
@@ -217,9 +221,16 @@ async function main() {
   ok('socket payment + order update fired', !!gotStatusUpdate, gotStatusUpdate);
 
   section('Orders (status flow by admin)');
-  for (const st of ['packed', 'shipped', 'on_the_way', 'delivered']) {
+  for (const st of ['packed', 'ready', 'shipped', 'on_the_way', 'delivered']) {
     const r = await req('PATCH', `/api/admin/orders/${codId}/status`, { token: adminToken, body: { status: st } });
     ok(`admin set status "${st}"`, r.status === 200 && r.data.order.status === st, r.data);
+    if (st === 'ready') {
+      ok('admin can mark Ready for Dispatch', r.data.order.status_label === 'Ready for Dispatch', r.data.order);
+      const readyTrack = await req('GET', `/api/orders/track/${codOrder.data.order.order_no}`);
+      ok('user sees Ready for Dispatch while tracking', readyTrack.data.status === 'ready' && readyTrack.data.status_label === 'Ready for Dispatch', readyTrack.data);
+      const liveOrders = await req('GET', '/api/admin/orders?status=ready', { token: adminToken });
+      ok('admin history filter finds ready orders', liveOrders.status === 200 && liveOrders.data.length === 1, liveOrders.data);
+    }
   }
   const badStatus = await req('PATCH', `/api/admin/orders/${codId}/status`, { token: adminToken, body: { status: 'teleported' } });
   ok('invalid status rejected', badStatus.status === 400);
@@ -237,6 +248,10 @@ async function main() {
   const stats = await req('GET', '/api/admin/stats', { token: adminToken });
   ok('GET /api/admin/stats', stats.status === 200 && stats.data.total_orders >= 2 && stats.data.total_products === 70, stats.data && { orders: stats.data.total_orders, products: stats.data.total_products });
   ok('stats has revenue + cod outstanding + trend', typeof stats.data.revenue_today === 'number' && typeof stats.data.cod_outstanding === 'number' && Array.isArray(stats.data.trend));
+  ok('stats daily revenue counts COD too', stats.data.revenue_today >= stats.data.paid_today, { revenue_today: stats.data.revenue_today, paid_today: stats.data.paid_today });
+  ok('stats monthly revenue present', typeof stats.data.revenue_month === 'number' && stats.data.revenue_month >= stats.data.revenue_today, stats.data.revenue_month);
+  ok('stats monthly orders + unread messages present', typeof stats.data.month_orders === 'number' && typeof stats.data.unread_messages === 'number');
+  ok('stats by_status includes ready', typeof stats.data.by_status.ready === 'number', stats.data.by_status);
   ok('stats by_category present', Array.isArray(stats.data.by_category) && stats.data.by_category.length === 5);
 
   const adminOrders = await req('GET', '/api/admin/orders', { token: adminToken });
@@ -305,6 +320,18 @@ async function main() {
   ok('GET /api/content/contact', contact.status === 200 && !!contact.data.email);
   const postContact = await req('POST', '/api/content/contact', { body: { name: 'Ramesh', email: 'r@x.com', message: 'Need bulk kit quote' } });
   ok('POST /api/content/contact', postContact.status === 201 && postContact.data.ok);
+
+  const adminMessages = await req('GET', '/api/admin/messages', { token: adminToken });
+  ok('admin sees customer messages', adminMessages.status === 200 && adminMessages.data.length >= 1, adminMessages.data && adminMessages.data.length);
+  const firstMsg = adminMessages.data[0];
+  ok('new message starts unread', firstMsg.read === false);
+  const readMsg = await req('PATCH', `/api/admin/messages/${firstMsg.id}/read`, { token: adminToken, body: { read: true } });
+  ok('admin marks message read', readMsg.status === 200 && readMsg.data.read === true);
+  const userMessages = await req('GET', '/api/admin/messages', { token: userToken });
+  ok('user cannot read admin messages -> 403', userMessages.status === 403);
+
+  const orderNoteSearch = await req('GET', '/api/admin/orders?q=DM', { token: adminToken });
+  ok('admin order search by query', orderNoteSearch.status === 200 && orderNoteSearch.data.length >= 2, orderNoteSearch.data && orderNoteSearch.data.length);
 
   section('Banners / carousel');
   const bannersPub = await req('GET', '/api/banners');

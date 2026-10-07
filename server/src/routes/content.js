@@ -61,8 +61,8 @@ router.get('/contact', (req, res) => {
   res.json({
     title: 'Contact Us',
     email: 'support@devamart.in',
-    phone: '+91 90000 00000',
-    whatsapp: '+91 90000 00000',
+    phone: '+91 90381 50556',
+    whatsapp: '+91 90381 50556',
     hours: 'Mon – Sun, 9:00 AM – 8:00 PM IST',
     address: 'DevaMart Spiritual Store, 2nd Floor, Temple Road, Bengaluru, Karnataka 560001',
   });

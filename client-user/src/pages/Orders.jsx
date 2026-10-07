@@ -24,8 +24,9 @@ export default function Orders() {
   }, []);
 
   const pills = {
-    placed: ['placed', 'Order Placed'], packed: ['packed', 'Packed'], shipped: ['shipped', 'Shipped'],
-    on_the_way: ['on_the_way', 'On The Way'], delivered: ['delivered', 'Delivered'], cancelled: ['cancelled', 'Cancelled'],
+    placed: ['placed', 'Order Placed'], packed: ['packed', 'Packed'], ready: ['ready', 'Ready for Dispatch'],
+    shipped: ['shipped', 'Shipped'], on_the_way: ['on_the_way', 'On The Way'],
+    delivered: ['delivered', 'Delivered'], cancelled: ['cancelled', 'Cancelled'],
   };
 
   return (

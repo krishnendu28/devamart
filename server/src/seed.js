@@ -668,7 +668,7 @@ function seed() {
 
   const adminPass = bcrypt.hashSync('Admin@1234', 10);
   db.prepare('INSERT INTO users (name, phone, email, password_hash, role) VALUES (?,?,?,?,?)')
-    .run('DevaMart Admin', '9000000000', 'admin@devamart.in', adminPass, 'admin');
+    .run('DevaMart Admin', '9038150556', 'admin@devamart.in', adminPass, 'admin');
 
   const userPass = bcrypt.hashSync('User@1234', 10);
   db.prepare('INSERT INTO users (name, phone, email, password_hash, role) VALUES (?,?,?,?,?)')

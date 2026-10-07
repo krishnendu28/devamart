@@ -4,8 +4,9 @@ import { api, money, time, toast, connectSocket } from '../api';
 import Icon from '../components/Icons';
 
 const STATUS_META = {
-  placed: ['placed', 'Order Placed'], packed: ['packed', 'Packed'], shipped: ['shipped', 'Shipped'],
-  on_the_way: ['on_the_way', 'On The Way'], delivered: ['delivered', 'Delivered'], cancelled: ['cancelled', 'Cancelled'],
+  placed: ['placed', 'Order Placed'], packed: ['packed', 'Packed'], ready: ['ready', 'Ready for Dispatch'],
+  shipped: ['shipped', 'Shipped'], on_the_way: ['on_the_way', 'On The Way'],
+  delivered: ['delivered', 'Delivered'], cancelled: ['cancelled', 'Cancelled'],
 };
 
 export default function Dashboard() {
@@ -42,10 +43,18 @@ export default function Dashboard() {
   if (loading && !stats) return <div className="loading">Loading dashboard…</div>;
 
   const cards = [
-    { lbl: 'Revenue Today', val: money(stats.revenue_today), ic: 'banknote', cls: 'red', tip: 'Paid orders today' },
-    { lbl: 'Total Sales', val: money(stats.total_sales), ic: 'gem', cls: 'gold', tip: 'All time paid revenue' },
-    { lbl: 'Pending Orders', val: stats.pending_orders, ic: 'clock', cls: 'blue', tip: 'Placed → On The Way' },
+    { lbl: 'Revenue Today', val: money(stats.revenue_today), ic: 'banknote', cls: 'red', tip: 'All orders placed today (COD + online)' },
+    { lbl: 'Revenue This Month', val: money(stats.revenue_month), ic: 'gem', cls: 'gold', tip: 'All orders placed this month (COD + online)' },
+    { lbl: 'Received (All Time)', val: money(stats.total_sales), ic: 'landmark', cls: 'purple', tip: 'Payments actually received' },
     { lbl: 'Total Orders', val: stats.total_orders, ic: 'cart', cls: 'green', tip: 'Including COD & online' },
+  ];
+
+  const cards2 = [
+    { lbl: "Today's Orders", val: stats.today_orders, ic: 'clock' },
+    { lbl: 'Orders This Month', val: stats.month_orders, ic: 'box' },
+    { lbl: 'Pending Orders', val: stats.pending_orders, ic: 'activity' },
+    { lbl: 'COD Outstanding', val: money(stats.cod_outstanding), ic: 'banknote' },
+    { lbl: 'Customers', val: stats.total_users, ic: 'user' },
   ];
 
   return (
@@ -73,13 +82,8 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="cards" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        {[
-          { lbl: "Today's Orders", val: stats.today_orders, ic: 'clock' },
-          { lbl: 'COD Outstanding', val: money(stats.cod_outstanding), ic: 'banknote' },
-          { lbl: 'Customers', val: stats.total_users, ic: 'user' },
-          { lbl: 'Products Live', val: stats.total_products, ic: 'bag' },
-        ].map(c => (
+      <div className="cards five">
+        {cards2.map(c => (
           <div className="card" key={c.lbl}>
             <span className="ic gray"><Icon name={c.ic} size={22} /></span>
             <span><span className="val">{c.val}</span><span className="lbl" style={{ display: 'block' }}>{c.lbl}</span></span>
@@ -103,7 +107,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="cards" style={{ gridTemplateColumns: '2fr 1.4fr' }}>
+      <div className="cards split">
         <div className="panel">
           <h3><Icon name="box" size={19} /> Orders by status</h3>
           <div className="stat-row">
@@ -111,13 +115,15 @@ export default function Dashboard() {
               <div className="stat" key={k}><b>{v}</b><span>{STATUS_META[k]?.[1] || k}</span></div>
             ))}
           </div>
-          <div className="stat-row mt" style={{ gridTemplateColumns: 'repeat(2,1fr)', marginTop: 12 }}>
+          <div className="stat-row two" style={{ marginTop: 12 }}>
             <div className="stat"><b>{stats.cod_orders}</b><span>COD orders</span></div>
             <div className="stat"><b>{stats.online_orders}</b><span>Online orders</span></div>
           </div>
         </div>
         <div className="panel">
-          <h3><Icon name="bag" size={19} /> Products by category</h3>
+          <h3><Icon name="bag" size={19} /> Products by category
+            <span className="pill paid" style={{ marginLeft: 'auto' }}>{stats.total_products} live</span>
+          </h3>
           {stats.by_category.map(c => (
             <div key={c.slug} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 2px', borderBottom: '1px dashed var(--line)' }}>
               <span>{c.category}</span><b style={{ color: 'var(--red-dark)' }}>{c.products}</b>

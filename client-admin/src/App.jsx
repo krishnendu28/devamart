@@ -6,6 +6,7 @@ import Icon from './components/Icons';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
+import Messages from './pages/Messages';
 import Products from './pages/Products';
 import Categories from './pages/Categories';
 import Customers from './pages/Customers';
@@ -32,6 +33,7 @@ function WithLayout({ title, sub, children }) {
   const links = [
     { to: '/', label: 'Dashboard', icon: 'home' },
     { to: '/orders', label: 'Orders', icon: 'box' },
+    { to: '/messages', label: 'Messages', icon: 'mail' },
     { to: '/banners', label: 'Banners', icon: 'image' },
     { to: '/products', label: 'Products', icon: 'bag' },
     { to: '/categories', label: 'Categories', icon: 'flame' },
@@ -98,7 +100,8 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<Guard><WithLayout title="Dashboard" sub="Realtime revenue, orders &amp; performance"><Dashboard /></WithLayout></Guard>} />
-        <Route path="/orders" element={<Guard><WithLayout title="Orders" sub="Live orders · update status &amp; payments"><Orders /></WithLayout></Guard>} />
+        <Route path="/orders" element={<Guard><WithLayout title="Orders" sub="Live orders · history · update status &amp; payments"><Orders /></WithLayout></Guard>} />
+        <Route path="/messages" element={<Guard><WithLayout title="Messages" sub="Customer enquiries from the Contact Us page"><Messages /></WithLayout></Guard>} />
         <Route path="/banners" element={<Guard><WithLayout title="Banners" sub="Manage the home carousel &amp; launching slider"><Banners /></WithLayout></Guard>} />
         <Route path="/products" element={<Guard><WithLayout title="Products" sub="Add, edit &amp; update — changes go live instantly"><Products /></WithLayout></Guard>} />
         <Route path="/categories" element={<Guard><WithLayout title="Categories" sub="Manage store categories"><Categories /></WithLayout></Guard>} />

@@ -43,7 +43,7 @@ export default function Footer() {
           </div>
           <div>
             <h4>Help</h4>
-            <p><Icon name="phone" size={15} /> +91 90000 00000</p>
+            <p><a href="tel:+919038150556"><Icon name="phone" size={15} /> +91 90381 50556</a></p>
             <p><Icon name="mail" size={15} /> support@devamart.in</p>
             <p><Icon name="clock" size={15} /> 9 AM – 8 PM IST</p>
             <div className="pay-chips">

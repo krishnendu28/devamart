@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { api, money } from '../api';
 import { toast } from '../components/Toast';
 import Icon from '../components/Icons';
@@ -26,8 +26,10 @@ function loadRazorpaySdk(key) {
 export default function Payment() {
   const { orderId } = useParams();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const requestedApp = params.get('app');
   const [session, setSession] = useState(null);
-  const [gateway, setGateway] = useState('gpay');
+  const [gateway, setGateway] = useState(() => (GATEWAYS.some(g => g.key === requestedApp) ? requestedApp : 'gpay'));
   const [stage, setStage] = useState('init'); // init | upi | processing | success
   const [upiId, setUpiId] = useState('');
   const [err, setErr] = useState('');
@@ -147,6 +149,9 @@ export default function Payment() {
         {stage === 'init' && !isRzp && (
           <>
             <div style={{ fontWeight: 700, color: 'var(--red-dark)', marginBottom: 8 }}>Choose your UPI app</div>
+            <div className="alert info small" style={{ fontSize: '.8rem', marginTop: 0 }}>
+              <b>Google Pay · PhonePe · Other UPI</b> are being wired up — live UPI collection switches on with gateway keys. Until then this is a simulated checkout.
+            </div>
             <div className="gateways">
               {GATEWAYS.map((x) => (
                 <div key={x.key} className={`gateway ${gateway === x.key ? 'active' : ''}`} onClick={() => setGateway(x.key)}>

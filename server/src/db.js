@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_method TEXT NOT NULL,
   payment_status TEXT NOT NULL DEFAULT 'pending',
   status TEXT NOT NULL DEFAULT 'placed',
+  note TEXT DEFAULT '',
   placed_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (user_id) REFERENCES users(id)
@@ -105,6 +106,7 @@ CREATE TABLE IF NOT EXISTS contact_messages (
   email TEXT,
   phone TEXT,
   message TEXT NOT NULL,
+  is_read INTEGER DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -145,5 +147,11 @@ CREATE TABLE IF NOT EXISTS chatbot_messages (
 const productCols = db.prepare('PRAGMA table_info(products)').all().map((c) => c.name);
 if (!productCols.includes('checklist')) db.exec("ALTER TABLE products ADD COLUMN checklist TEXT DEFAULT '[]'");
 if (!productCols.includes('instructions')) db.exec("ALTER TABLE products ADD COLUMN instructions TEXT DEFAULT '[]'");
+
+// Migration: customer note on orders + read flag on contact messages
+const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
+if (!orderCols.includes('note')) db.exec("ALTER TABLE orders ADD COLUMN note TEXT DEFAULT ''");
+const msgCols = db.prepare('PRAGMA table_info(contact_messages)').all().map((c) => c.name);
+if (!msgCols.includes('is_read')) db.exec("ALTER TABLE contact_messages ADD COLUMN is_read INTEGER DEFAULT 0");
 
 module.exports = db;

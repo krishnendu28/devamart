@@ -175,7 +175,7 @@ export default function Navbar() {
           )}
         </nav>
         <div className="drawer-foot">
-          Help? Call +91 90000 00000<br />support@devamart.in
+          Help? Call <a href="tel:+919038150556">+91 90381 50556</a><br />support@devamart.in
         </div>
       </aside>
     </>

@@ -8,6 +8,7 @@ import Icon from '../components/Icons';
 const STEPS = [
   { key: 'placed', label: 'Order Placed', icon: 'doc' },
   { key: 'packed', label: 'Packed', icon: 'box' },
+  { key: 'ready', label: 'Ready for Dispatch', icon: 'send' },
   { key: 'shipped', label: 'Shipped', icon: 'truck' },
   { key: 'on_the_way', label: 'On The Way', icon: 'pin' },
   { key: 'delivered', label: 'Delivered', icon: 'check' },
@@ -50,7 +51,7 @@ export default function TrackOrder() {
       if (o.order_no === data.order_no) {
         setData(d => ({ ...d, status: o.status, status_label: o.status_label, updated_at: o.updated_at,
           progress: d.progress.map(p => {
-            const order = ['placed', 'packed', 'shipped', 'on_the_way', 'delivered'];
+            const order = ['placed', 'packed', 'ready', 'shipped', 'on_the_way', 'delivered'];
             return { ...p, reached: order.indexOf(p.status) <= order.indexOf(o.status) };
           }),
         }));
@@ -63,7 +64,7 @@ export default function TrackOrder() {
 
   return (
     <div className="container page">
-      <div className="section-title"><h2>Track Your Order</h2><span className="sub">Live status: Packed → Shipped → On The Way → Delivered</span></div>
+      <div className="section-title"><h2>Track Your Order</h2><span className="sub">Live status: Packed → Ready for Dispatch → Shipped → On The Way → Delivered</span></div>
       <div className="track-wrap">
         <div className="prose" style={{ padding: 20 }}>
           <div className="row">

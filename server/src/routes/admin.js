@@ -15,24 +15,44 @@ router.get('/stats', (req, res) => {
   const today = new Date();
   const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
+  // Revenue counts every non-cancelled order (COD included), based on when it was placed.
   const revenueToday = db.prepare(`
     SELECT COALESCE(SUM(total),0) AS v FROM orders
-    WHERE date(updated_at) = date('now') AND status != 'cancelled' AND payment_status='paid'
+    WHERE date(placed_at) = date('now') AND status != 'cancelled'
+  `).get().v;
+
+  const revenueMonth = db.prepare(`
+    SELECT COALESCE(SUM(total),0) AS v FROM orders
+    WHERE strftime('%Y-%m', placed_at) = strftime('%Y-%m','now') AND status != 'cancelled'
+  `).get().v;
+
+  const paidToday = db.prepare(`
+    SELECT COALESCE(SUM(total),0) AS v FROM orders
+    WHERE date(placed_at) = date('now') AND status != 'cancelled' AND payment_status='paid'
+  `).get().v;
+
+  const paidMonth = db.prepare(`
+    SELECT COALESCE(SUM(total),0) AS v FROM orders
+    WHERE strftime('%Y-%m', placed_at) = strftime('%Y-%m','now') AND status != 'cancelled' AND payment_status='paid'
   `).get().v;
 
   const codToday = db.prepare(`
     SELECT COALESCE(SUM(total),0) AS v FROM orders
-    WHERE date(updated_at) = date('now') AND status != 'cancelled' AND payment_method='cod'
+    WHERE date(placed_at) = date('now') AND status != 'cancelled' AND payment_method='cod'
   `).get().v;
 
   const totalSales = db.prepare(`
     SELECT COALESCE(SUM(total),0) AS v FROM orders WHERE status != 'cancelled' AND payment_status='paid'
+  `).get().v;
+  const totalRevenue = db.prepare(`
+    SELECT COALESCE(SUM(total),0) AS v FROM orders WHERE status != 'cancelled'
   `).get().v;
   const codOutstanding = db.prepare(`
     SELECT COALESCE(SUM(total),0) AS v FROM orders WHERE status != 'cancelled' AND payment_method='cod' AND payment_status='pending'
   `).get().v;
   const totalOrders = db.prepare(`SELECT COUNT(*) c FROM orders`).get().c;
   const todayOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE date(placed_at)=date('now')`).get().c;
+  const monthOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE strftime('%Y-%m', placed_at)=strftime('%Y-%m','now')`).get().c;
   const pendingOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE status NOT IN ('delivered','cancelled')`).get().c;
   const deliveredOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE status='delivered'`).get().c;
   const totalUsers = db.prepare(`SELECT COUNT(*) c FROM users WHERE role='user'`).get().c;
@@ -52,14 +72,21 @@ router.get('/stats', (req, res) => {
   `).all();
 
   const byStatus = {};
-  for (const s of ['placed', 'packed', 'shipped', 'on_the_way', 'delivered', 'cancelled']) {
+  for (const s of ['placed', 'packed', 'ready', 'shipped', 'on_the_way', 'delivered', 'cancelled']) {
     byStatus[s] = db.prepare(`SELECT COUNT(*) c FROM orders WHERE status=?`).get(s).c;
   }
 
+  const unreadMessages = db.prepare(`SELECT COUNT(*) c FROM contact_messages WHERE is_read=0`).get().c;
+
   res.json({
     revenue_today: revenueToday,
+    revenue_month: revenueMonth,
+    paid_today: paidToday,
+    paid_month: paidMonth,
+    month_orders: monthOrders,
     cod_today: codToday,
     total_sales: totalSales,
+    total_revenue: totalRevenue,
     cod_outstanding: codOutstanding,
     total_orders: totalOrders,
     today_orders: todayOrders,
@@ -69,29 +96,35 @@ router.get('/stats', (req, res) => {
     total_products: totalProducts,
     cod_orders: codOrders,
     online_orders: onlineOrders,
+    unread_messages: unreadMessages,
     trend, by_category: byCategory, by_status: byStatus,
   });
 });
 
 // ---------- Orders ----------
 router.get('/orders', (req, res) => {
-  const { status, payment } = req.query;
+  const { status, payment, q } = req.query;
   const where = [];
   const params = [];
   if (status) { where.push('o.status=?'); params.push(status); }
   if (payment) { where.push('o.payment_method=?'); params.push(payment); }
+  if (q) {
+    where.push('(o.order_no LIKE ? OR u.name LIKE ? OR u.phone LIKE ? OR u.email LIKE ? OR o.note LIKE ?)');
+    const like = `%${q}%`;
+    params.push(like, like, like, like, like);
+  }
   const wsql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
   const rows = db.prepare(`
     SELECT o.*, u.name AS customer_name, u.email AS customer_email, u.phone AS customer_phone
-    FROM orders o JOIN users u ON u.id=o.user_id ${wsql} ORDER BY o.id DESC LIMIT 300
+    FROM orders o JOIN users u ON u.id=o.user_id ${wsql} ORDER BY o.id DESC LIMIT 500
   `).all(...params);
   res.json(rows.map(orderView));
 });
 
 router.patch('/orders/:id/status', (req, res) => {
   const { status } = req.body || {};
-  const valid = ['placed', 'packed', 'shipped', 'on_the_way', 'delivered', 'cancelled'];
+  const valid = ['placed', 'packed', 'ready', 'shipped', 'on_the_way', 'delivered', 'cancelled'];
   if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status' });
   const order = db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
@@ -265,6 +298,27 @@ router.get('/login-logs', (req, res) => {
   const { limit = 200 } = req.query;
   const rows = db.prepare('SELECT * FROM login_logs ORDER BY id DESC LIMIT ?').all(Math.min(+limit || 200, 1000));
   res.json(rows);
+});
+
+// ---------- Messages (contact form + customer notes) ----------
+router.get('/messages', (req, res) => {
+  const rows = db.prepare('SELECT * FROM contact_messages ORDER BY id DESC LIMIT 300').all();
+  res.json(rows.map(m => ({ ...m, read: !!m.is_read })));
+});
+
+router.patch('/messages/:id/read', (req, res) => {
+  const existing = db.prepare('SELECT * FROM contact_messages WHERE id=?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Message not found' });
+  const isRead = req.body?.read === undefined ? 1 : (req.body.read ? 1 : 0);
+  db.prepare('UPDATE contact_messages SET is_read=? WHERE id=?').run(isRead, existing.id);
+  res.json({ ok: true, read: !!isRead });
+});
+
+router.delete('/messages/:id', (req, res) => {
+  const existing = db.prepare('SELECT * FROM contact_messages WHERE id=?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Message not found' });
+  db.prepare('DELETE FROM contact_messages WHERE id=?').run(existing.id);
+  res.json({ ok: true });
 });
 
 module.exports = router;

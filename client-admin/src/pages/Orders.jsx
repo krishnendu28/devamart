@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { api, money, time, toast, connectSocket } from '../api';
 
-const STATUSES = ['placed', 'packed', 'shipped', 'on_the_way', 'delivered', 'cancelled'];
+const STATUSES = ['placed', 'packed', 'ready', 'shipped', 'on_the_way', 'delivered', 'cancelled'];
 const STATUS_META = {
-  placed: ['placed', 'Order Placed'], packed: ['packed', 'Packed'], shipped: ['shipped', 'Shipped'],
-  on_the_way: ['on_the_way', 'On The Way'], delivered: ['delivered', 'Delivered'], cancelled: ['cancelled', 'Cancelled'],
+  placed: ['placed', 'Order Placed'], packed: ['packed', 'Packed'], ready: ['ready', 'Ready for Dispatch'],
+  shipped: ['shipped', 'Shipped'], on_the_way: ['on_the_way', 'On The Way'],
+  delivered: ['delivered', 'Delivered'], cancelled: ['cancelled', 'Cancelled'],
 };
+const DONE_STATUSES = ['delivered', 'cancelled'];
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
+  const [scope, setScope] = useState('active');
   const [statusFilter, setStatusFilter] = useState('');
   const [payFilter, setPayFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -45,14 +48,28 @@ export default function Orders() {
     if (selected && selected.id === id) setSelected(s => ({ ...s, payment_status: 'paid' }));
   }
 
-  const filtered = search.trim()
-    ? orders.filter(o => `${o.order_no} ${o.customer_name} ${o.customer_phone}`.toLowerCase().includes(search.trim().toLowerCase()))
+  const searchFiltered = search.trim()
+    ? orders.filter(o => `${o.order_no} ${o.customer_name} ${o.customer_phone} ${o.note || ''}`.toLowerCase().includes(search.trim().toLowerCase()))
     : orders;
+
+  const filtered = searchFiltered.filter(o => {
+    const done = DONE_STATUSES.includes(o.status);
+    if (scope === 'active' && done) return false;
+    if (scope === 'history' && !done) return false;
+    return true;
+  });
+
+  const historyRevenue = filtered.reduce((s, o) => (o.status === 'cancelled' ? s : s + o.total), 0);
 
   return (
     <>
       <div className="toolbar">
-        <input placeholder="Search order #, customer, phone…" value={search} onChange={e => setSearch(e.target.value)} style={{ width: 240 }} />
+        <div className="seg">
+          <button className={scope === 'active' ? 'active' : ''} onClick={() => setScope('active')}>Live Orders</button>
+          <button className={scope === 'history' ? 'active' : ''} onClick={() => setScope('history')}>Order History</button>
+          <button className={scope === 'all' ? 'active' : ''} onClick={() => setScope('all')}>All</button>
+        </div>
+        <input placeholder="Search order #, customer, phone, note…" value={search} onChange={e => setSearch(e.target.value)} style={{ width: 250 }} />
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           {STATUSES.map(s => <option key={s} value={s}>{STATUS_META[s][1]}</option>)}
@@ -63,17 +80,18 @@ export default function Orders() {
           <option value="online">Online</option>
         </select>
         <b className="muted">{filtered.length} order{filtered.length !== 1 ? 's' : ''}</b>
+        {scope === 'history' && <b className="muted">· Sales {money(historyRevenue)}</b>}
       </div>
 
       <div className="panel">
         <div className="table-wrap">
           <table className="tbl">
             <thead>
-              <tr><th>Order #</th><th>Customer</th><th>Address</th><th>Items</th><th>Payment</th><th>Status</th><th>Total</th><th>Placed</th><th>Actions</th></tr>
+              <tr><th>Order #</th><th>Customer</th><th>Address</th><th>Message</th><th>Items</th><th>Payment</th><th>Status</th><th>Total</th><th>Placed</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={9}><div className="loading">Loading…</div></td></tr>}
-              {!loading && filtered.length === 0 && <tr><td colSpan={9}><div className="empty">No orders to show.</div></td></tr>}
+              {loading && <tr><td colSpan={10}><div className="loading">Loading…</div></td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={10}><div className="empty">No orders to show.</div></td></tr>}
               {filtered.map(o => {
                 const [cls, label] = STATUS_META[o.status] || ['placed', o.status];
                 return (
@@ -81,6 +99,9 @@ export default function Orders() {
                     <td><b>#{o.order_no}</b></td>
                     <td>{o.customer_name}<br /><span className="muted" style={{ fontSize: '.74rem' }}>{o.customer_phone}</span></td>
                     <td style={{ fontSize: '.78rem', color: 'var(--muted)' }}>{o.address.line}, {o.address.city}<br />{o.address.state} {o.address.pincode}</td>
+                    <td className="note-cell" style={{ maxWidth: 170, fontSize: '.76rem', color: 'var(--muted)' }}>
+                      {o.note ? o.note : <span style={{ opacity: .45 }}>—</span>}
+                    </td>
                     <td>
                       <div className="mini-thumbs" title={o.items.map(i => `${i.name} ×${i.qty}`).join(', ')}>
                         {o.items.slice(0, 3).map((it, i) => <img key={i} src={it.image} alt="" />)}
@@ -127,17 +148,23 @@ export default function Orders() {
                 </div>
               </div>
               <div>
-                <div className="field"><label>Payment & status</label>
-                  <div style={{ fontSize: '.86rem' }}>
-                    <span className={`pill ${selected.payment_method === 'cod' ? 'placed' : 'packed'}`}>{selected.payment_method === 'cod' ? 'Cash on Delivery' : 'Online UPI'}</span>
-                    <span className={`pill ${selected.payment_status === 'paid' ? 'paid' : 'pending'}`} style={{ marginLeft: 6 }}>{selected.payment_status === 'paid' ? 'Paid' : 'Payment pending'}</span>
-                    <div style={{ marginTop: 6 }}>
-                      <select value={selected.status} onChange={e => setStatus(selected.id, e.target.value)}>
-                        {STATUSES.map(s => <option key={s} value={s}>{STATUS_META[s][1]}</option>)}
-                      </select>
-                    </div>
-                  </div>
+                <div className="field"><label>Customer message</label>
+                  {selected.note
+                    ? <div className="alert info" style={{ fontSize: '.84rem', margin: 0, whiteSpace: 'pre-wrap' }}>{selected.note}</div>
+                    : <div className="muted" style={{ fontSize: '.82rem' }}>No message left with this order.</div>}
                 </div>
+              </div>
+            </div>
+
+            <div className="field"><label>Payment &amp; status</label>
+              <div style={{ fontSize: '.86rem', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span className={`pill ${selected.payment_method === 'cod' ? 'placed' : 'packed'}`}>{selected.payment_method === 'cod' ? 'Cash on Delivery' : 'Online UPI'}</span>
+                <span className={`pill ${selected.payment_status === 'paid' ? 'paid' : 'pending'}`}>{selected.payment_status === 'paid' ? 'Paid' : 'Payment pending'}</span>
+              </div>
+              <div style={{ marginTop: 8, maxWidth: 260 }}>
+                <select value={selected.status} onChange={e => setStatus(selected.id, e.target.value)}>
+                  {STATUSES.map(s => <option key={s} value={s}>{STATUS_META[s][1]}</option>)}
+                </select>
               </div>
             </div>
 

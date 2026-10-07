@@ -27,7 +27,7 @@ export default function Contact() {
 
   return (
     <InfoLayout title={data.title}>
-      <div className="detail" style={{ gridTemplateColumns: '1fr 1fr', gap: 26 }}>
+      <div className="detail two">
         <div className="prose" style={{ padding: 24 }}>
           <h3 style={{ marginTop: 0 }}>Get in touch</h3>
           <p><Icon name="mail" size={15} /> <b>{data.email}</b></p>

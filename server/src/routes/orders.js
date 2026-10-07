@@ -5,9 +5,9 @@ const { productToView, resolveImage } = require('../images');
 
 const router = express.Router();
 
-const STATUS_FLOW = ['placed', 'packed', 'shipped', 'on_the_way', 'delivered'];
+const STATUS_FLOW = ['placed', 'packed', 'ready', 'shipped', 'on_the_way', 'delivered'];
 const STATUS_LABEL = {
-  placed: 'Order Placed', packed: 'Packed', shipped: 'Shipped',
+  placed: 'Order Placed', packed: 'Packed', ready: 'Ready for Dispatch', shipped: 'Shipped',
   on_the_way: 'On The Way', delivered: 'Delivered', cancelled: 'Cancelled',
 };
 
@@ -29,6 +29,7 @@ function orderView(o) {
     items, subtotal: o.subtotal, shipping: o.shipping, total: o.total,
     address, payment_method: o.payment_method, payment_status: o.payment_status,
     status: o.status, status_label: STATUS_LABEL[o.status] || o.status,
+    note: o.note || '',
     placed_at: o.placed_at, updated_at: o.updated_at,
     customer_name: o.customer_name,
     customer_email: o.customer_email,
@@ -42,13 +43,15 @@ function emit(io, event, payload) {
 
 // POST /api/orders  -> create order from user's cart
 router.post('/', requireAuth('user'), (req, res) => {
-  const { address, paymentMethod } = req.body || {};
+  const { address, paymentMethod, note, upiApp } = req.body || {};
   if (!address || !address.name || !address.phone || !address.line || !address.city || !address.state || !address.pincode) {
     return res.status(400).json({ error: 'Complete delivery address is required' });
   }
   if (!['cod', 'online'].includes(paymentMethod)) {
     return res.status(400).json({ error: 'Choose Cash on Delivery or Online payment' });
   }
+  const cleanNote = String(note || '').trim().slice(0, 500);
+  const cleanUpi = ['gpay', 'phonepe', 'paytm', 'upi'].includes(upiApp) ? upiApp : 'upi';
 
   const cartRows = db.prepare(`
     SELECT ci.id AS cart_id, ci.qty, p.*, c.name AS category_name
@@ -70,10 +73,10 @@ router.post('/', requireAuth('user'), (req, res) => {
   const orderNo = makeOrderNo();
   const insert = db.transaction(() => {
     const info = db.prepare(`
-      INSERT INTO orders (order_no, user_id, items, subtotal, shipping, total, address, payment_method, payment_status, status)
-      VALUES (?,?,?,?,?,?,?,?,?, 'placed')
+      INSERT INTO orders (order_no, user_id, items, subtotal, shipping, total, address, payment_method, payment_status, status, note)
+      VALUES (?,?,?,?,?,?,?,?,?, 'placed', ?)
     `).run(orderNo, req.user.id, JSON.stringify(items), subtotal, shipping, total,
-      JSON.stringify(address), paymentMethod, paymentMethod === 'cod' ? 'pending' : 'pending');
+      JSON.stringify(address), paymentMethod, 'pending', cleanNote);
 
     const dec = db.prepare('UPDATE products SET stock = MAX(0, stock - ?) WHERE id=?');
     for (const r of cartRows) dec.run(r.qty, r.id);
@@ -81,7 +84,7 @@ router.post('/', requireAuth('user'), (req, res) => {
 
     if (paymentMethod === 'online') {
       db.prepare('INSERT INTO payments (order_id, amount, method, gateway, status) VALUES (?,?,?,?,?)')
-        .run(info.lastInsertRowid, total, 'upi', 'devaMart', 'pending');
+        .run(info.lastInsertRowid, total, 'upi', cleanUpi, 'pending');
     }
     return info.lastInsertRowid;
   });
