@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { api, money, toast, connectSocket } from '../api';
 
-const blank = { id: null, name: '', sku: '', category_id: '', description: '', price: '', mrp: '', stock: 100, image: '', featured: 0, active: 1, checklist: [], instructions: [] };
+const IMAGE_SLOTS = 5;
+const emptyImages = () => Array.from({ length: IMAGE_SLOTS }, () => '');
+const cleanImages = list => (list || []).map(s => String(s || '').trim()).filter(Boolean).slice(0, IMAGE_SLOTS);
+
+const blank = {
+  id: null, name: '', sku: '', category_id: '', description: '', price: '', mrp: '', stock: 100,
+  image: '', images: emptyImages(), available: 1, featured: 0, active: 1, checklist: [], instructions: [],
+};
 
 export default function Products() {
   const [products, setProducts] = useState([]);
@@ -28,10 +35,25 @@ export default function Products() {
     return () => s.close();
   }, []);
 
-  function openAdd() { setForm({ ...blank, category_id: categories[0]?.id || '' }); setModal(true); }
+  function openAdd() { setForm({ ...blank, images: emptyImages(), category_id: categories[0]?.id || '' }); setModal(true); }
   function openEdit(p) {
-    setForm({ id: p.id, name: p.name, sku: p.sku || '', category_id: p.category_id, description: p.description, price: p.price, mrp: p.mrp || '', stock: p.stock, image: p.image || '', featured: p.featured, active: p.active, checklist: Array.isArray(p.checklist) ? p.checklist : [], instructions: Array.isArray(p.instructions) ? p.instructions : [] });
+    const imgs = cleanImages(p.images && p.images.length ? p.images : (p.image ? [p.image] : []));
+    while (imgs.length < IMAGE_SLOTS) imgs.push('');
+    setForm({
+      id: p.id, name: p.name, sku: p.sku || '', category_id: p.category_id, description: p.description,
+      price: p.price, mrp: p.mrp || '', stock: p.stock, image: p.image || '', images: imgs,
+      available: p.available === 0 ? 0 : 1,
+      featured: p.featured, active: p.active,
+      checklist: Array.isArray(p.checklist) ? p.checklist : [], instructions: Array.isArray(p.instructions) ? p.instructions : [],
+    });
     setModal(true);
+  }
+
+  function setImage(i, value) {
+    setForm(f => { const next = [...f.images]; next[i] = value; return { ...f, images: next, image: cleanImages(next)[0] || '' }; });
+  }
+  function clearImage(i) {
+    setForm(f => { const next = [...f.images]; next[i] = ''; return { ...f, images: next, image: cleanImages(next)[0] || '' }; });
   }
 
   const isKit = () => categories.find(c => Number(c.id) === Number(form.category_id))?.slug === 'puja-samagri-kits';
@@ -39,10 +61,13 @@ export default function Products() {
   async function save(e) {
     e.preventDefault();
     setSaving(true);
+    const imgs = cleanImages(form.images);
     const body = {
       name: form.name, sku: form.sku, category_id: Number(form.category_id),
       description: form.description, price: Number(form.price), mrp: Number(form.mrp || form.price),
-      stock: Number(form.stock) || 0, image: form.image, featured: form.featured ? 1 : 0, active: form.active ? 1 : 0,
+      stock: Number(form.stock) || 0, image: imgs[0] || form.image || '', images: imgs,
+      available: form.available ? 1 : 0,
+      featured: form.featured ? 1 : 0, active: form.active ? 1 : 0,
     };
     if (isKit()) {
       body.checklist = form.checklist.map(s => String(s).trim()).filter(Boolean);
@@ -59,6 +84,12 @@ export default function Products() {
   async function toggleActive(p) {
     await api(`/api/admin/products/${p.id}`, { method: 'PATCH', body: { active: p.active ? 0 : 1 } });
     toast(p.active ? `"${p.name}" hidden from users` : `"${p.name}" is live again`);
+    await load();
+  }
+  async function toggleAvailable(p) {
+    const next = p.available === 0 ? 1 : 0;
+    await api(`/api/admin/products/${p.id}`, { method: 'PATCH', body: { available: next } });
+    toast(next ? `"${p.name}" is now AVAILABLE — users see it instantly ✅` : `"${p.name}" marked UNAVAILABLE for users`);
     await load();
   }
   async function remove(p) {
@@ -90,17 +121,22 @@ export default function Products() {
         <div className="table-wrap">
           <table className="tbl">
             <thead>
-              <tr><th>Product</th><th>SKU</th><th>Category</th><th>Price</th><th>MRP</th><th>Stock</th><th>Featured</th><th>Status</th><th>Actions</th></tr>
+              <tr><th>Product</th><th>SKU</th><th>Category</th><th>Price</th><th>MRP</th><th>Stock</th><th>Featured</th><th>Status</th><th>Availability</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={9}><div className="loading">Loading…</div></td></tr>}
-              {!loading && filtered.length === 0 && <tr><td colSpan={9}><div className="empty">No products match.</div></td></tr>}
+              {loading && <tr><td colSpan={10}><div className="loading">Loading…</div></td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={10}><div className="empty">No products match.</div></td></tr>}
               {filtered.map(p => (
                 <tr key={p.id} style={{ opacity: p.active ? 1 : .45 }}>
                   <td>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center', maxWidth: 260 }}>
                       <img src={p.image} className="thumb" alt="" />
-                      <b>{p.name}</b>
+                      <div>
+                        <b>{p.name}</b>
+                        {(p.images || []).length > 1 && (
+                          <div className="muted" style={{ fontSize: '.72rem' }}>{(p.images || []).length} images</div>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="muted" style={{ fontSize: '.78rem' }}>{p.sku || '—'}</td>
@@ -111,6 +147,15 @@ export default function Products() {
                   <td>{p.featured ? '⭐' : '—'}</td>
                   <td>
                     <span className={`pill ${p.active ? 'delivered' : 'cancelled'}`}>{p.active ? 'Live' : 'Hidden'}</span>
+                  </td>
+                  <td>
+                    <button
+                      className={`btn sm ${p.available === 0 ? 'danger' : 'gold'}`}
+                      onClick={() => toggleAvailable(p)}
+                      title="Toggle availability for users"
+                    >
+                      {p.available === 0 ? 'Unavailable' : 'Available'}
+                    </button>
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
@@ -175,9 +220,33 @@ export default function Products() {
                   </div>
                 </>
               )}
-              <div className="field"><label>Image URL</label>
-                <input value={form.image} onChange={e => setForm(f => ({ ...f, image: e.target.value }))} placeholder="https://… or leave blank for auto placeholder" />
-                {!form.image && <span className="muted" style={{ fontSize: '.76rem' }}>Leave empty → DevaMart generates a branded placeholder automatically.</span>}
+              <div className="field">
+                <label>Product Images — up to 5 (slot 1 is the main image)</label>
+                <div className="img-slots">
+                  {form.images.map((src, i) => (
+                    <div className={`img-slot ${src.trim() ? 'filled' : ''}`} key={i}>
+                      <div className="img-slot-preview">
+                        {src.trim()
+                          ? <img src={src} alt={`Slot ${i + 1}`} onError={e => { e.currentTarget.style.opacity = .25; }} />
+                          : <span>{i === 0 ? '★ Main' : `Slot ${i + 1}`}</span>}
+                      </div>
+                      <input
+                        value={src}
+                        onChange={e => setImage(i, e.target.value)}
+                        placeholder={i === 0 ? 'Main image URL' : `Image ${i + 1} URL (optional)`}
+                      />
+                      <button
+                        type="button"
+                        className="btn sm ghost"
+                        onClick={() => clearImage(i)}
+                        disabled={!src.trim()}
+                      >Clear</button>
+                    </div>
+                  ))}
+                </div>
+                <span className="muted" style={{ fontSize: '.76rem' }}>
+                  Add 4–5 photos so customers can browse every angle. Empty slots are ignored; leave all blank for an auto-generated placeholder.
+                </span>
               </div>
               <div className="f-row" style={{ marginBottom: 14 }}>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '.88rem' }}>
@@ -185,6 +254,9 @@ export default function Products() {
                 </label>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '.88rem' }}>
                   <input type="checkbox" checked={!!form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked ? 1 : 0 }))} /> Active (visible to users)
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '.88rem' }}>
+                  <input type="checkbox" checked={!!form.available} onChange={e => setForm(f => ({ ...f, available: e.target.checked ? 1 : 0 }))} /> Available for purchase
                 </label>
               </div>
               <button className="btn block" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save Changes' : 'Add Product'}</button>

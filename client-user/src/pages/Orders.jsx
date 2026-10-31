@@ -17,10 +17,11 @@ export default function Orders() {
 
   useEffect(() => {
     const socket = connectSocket(getToken());
-    socket.on('order:updated', (o) => {
+    const onUpdate = (o) => {
       setOrders(list => list.map(x => x.id === o.id ? { ...x, ...o } : x));
-    });
-    return () => socket.close();
+    };
+    socket.on('order:updated', onUpdate);
+    return () => socket.off('order:updated', onUpdate);
   }, []);
 
   const pills = {

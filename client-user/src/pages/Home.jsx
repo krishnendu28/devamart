@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, money } from '../api';
+import { api, getSocket, money } from '../api';
 import ProductCard from '../components/ProductCard';
 import Icon from '../components/Icons';
 import { toast } from '../components/Toast';
@@ -107,8 +107,8 @@ export default function Home() {
     return () => clearInterval(t);
   }, [slides.length]);
 
-  useEffect(() => {
-    Promise.all([
+  const loadData = useCallback(() => {
+    return Promise.all([
       api('/api/categories', { auth: false }),
       api('/api/products?featured=1', { auth: false }),
       api('/api/products?category=puja-samagri-kits&featured=1', { auth: false }),
@@ -118,6 +118,22 @@ export default function Home() {
       if (b && b.length) setBanners(b);
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Realtime: prices, images, availability and banners update without a reload.
+  useEffect(() => {
+    const s = getSocket();
+    const on = () => loadData();
+    s.on('product:changed', on);
+    s.on('categories:changed', on);
+    s.on('banners:changed', on);
+    return () => {
+      s.off('product:changed', on);
+      s.off('categories:changed', on);
+      s.off('banners:changed', on);
+    };
+  }, [loadData]);
 
   useEffect(() => {
     if (loading) return;

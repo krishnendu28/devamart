@@ -19,3 +19,6 @@ data/
 
 # vercel
 .vercel
+
+# generated QA reports
+*-report.json

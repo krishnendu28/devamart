@@ -286,6 +286,43 @@ async function main() {
   const adminStillSees = await req('GET', '/api/admin/products', { token: adminToken });
   ok('admin still sees inactive product', adminStillSees.data.some(p => p.id === newProdId && p.active === 0));
 
+  section('Product images & availability');
+  const imgA = 'https://example.com/a.jpg', imgB = 'https://example.com/b.jpg', imgC = 'https://example.com/c.jpg';
+  const multi = await req('POST', '/api/admin/products', {
+    token: adminToken,
+    body: { name: 'Multi Image Item', price: 88, category_id: catId, images: [imgA, imgB, imgC], available: 1, featured: true, stock: 3 },
+  });
+  const multiId = multi.data && multi.data.product && multi.data.product.id;
+  ok('create product with 3 images', multi.status === 201 && multiId && multi.data.product.images.length === 3, multi.data);
+  ok('primary image mirrors first slot', multi.data.product.image === imgA);
+  const many = await req('POST', '/api/admin/products', {
+    token: adminToken, body: { name: 'Too Many Images', price: 10, category_id: catId, images: [1, 2, 3, 4, 5, 6].map(i => `https://example.com/${i}.jpg`) },
+  });
+  ok('images capped at 5', many.status === 201 && many.data.product.images.length === 5, many.data);
+
+  const multiPublic = await req('GET', `/api/products/${multiId}`);
+  ok('public product exposes images[]', multiPublic.status === 200 && multiPublic.data.images.length === 3 && multiPublic.data.image === imgA);
+
+  const unavail = await req('PATCH', `/api/admin/products/${multiId}`, { token: adminToken, body: { available: 0 } });
+  ok('admin can mark product unavailable', unavail.status === 200 && unavail.data.product.available === 0, unavail.data);
+  ok('availability toggle preserves featured flag', unavail.data.product.featured === 1, unavail.data.product);
+  await wait(250);
+  ok('socket product:changed (unavailable) fired', !!gotProductChange && gotProductChange.action === 'updated' && gotProductChange.product.available === 0);
+  const listNoUnavail = await req('GET', '/api/products?category=' + catsAdmin.data[0].slug);
+  ok('unavailable product hidden from public list', listNoUnavail.status === 200 && !listNoUnavail.data.some(p => p.id === multiId));
+  const detailUnavail = await req('GET', `/api/products/${multiId}`);
+  ok('unavailable product detail still returns available:0', detailUnavail.status === 200 && detailUnavail.data.available === 0);
+  const addUnavail = await req('POST', '/api/cart', { token: userToken, body: { productId: multiId, qty: 1 } });
+  ok('cannot add unavailable product to cart', addUnavail.status === 400);
+
+  const reavail = await req('PATCH', `/api/admin/products/${multiId}`, { token: adminToken, body: { available: 1 } });
+  ok('admin can mark product available again', reavail.status === 200 && reavail.data.product.available === 1);
+  const listAvail = await req('GET', '/api/products?category=' + catsAdmin.data[0].slug);
+  ok('available product back in public list', listAvail.data.some(p => p.id === multiId));
+
+  await req('DELETE', `/api/admin/products/${multiId}`, { token: adminToken });
+  await req('DELETE', `/api/admin/products/${many.data.product.id}`, { token: adminToken });
+
   const newCat = await req('POST', '/api/admin/categories', { token: adminToken, body: { name: 'Test Category', icon: '🌸' } });
   ok('POST /api/admin/categories', newCat.status === 201 && newCat.data.category.id);
   const patchedCat = await req('PATCH', `/api/admin/categories/${newCat.data.category.id}`, { token: adminToken, body: { name: 'Test Category Renamed' } });

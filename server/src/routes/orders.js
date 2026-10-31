@@ -62,6 +62,11 @@ router.post('/', requireAuth('user'), (req, res) => {
 
   if (!cartRows.length) return res.status(400).json({ error: 'Your cart is empty' });
 
+  const unavailable = cartRows.filter(r => Number(r.available) === 0);
+  if (unavailable.length) {
+    return res.status(400).json({ error: `Currently unavailable: ${unavailable.map(r => r.name).join(', ')}. Please remove ${unavailable.length > 1 ? 'them' : 'it'} from your cart to continue.` });
+  }
+
   const items = cartRows.map(r => ({
     product_id: r.id, name: r.name, price: r.price, qty: r.qty,
     image: resolveImage(r), category: r.category_name,

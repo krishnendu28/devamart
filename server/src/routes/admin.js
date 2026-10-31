@@ -57,6 +57,7 @@ router.get('/stats', (req, res) => {
   const deliveredOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE status='delivered'`).get().c;
   const totalUsers = db.prepare(`SELECT COUNT(*) c FROM users WHERE role='user'`).get().c;
   const totalProducts = db.prepare(`SELECT COUNT(*) c FROM products`).get().c;
+  const availableProducts = db.prepare(`SELECT COUNT(*) c FROM products WHERE active=1 AND COALESCE(available,1)=1`).get().c;
   const codOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE payment_method='cod'`).get().c;
   const onlineOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE payment_method='online'`).get().c;
 
@@ -94,6 +95,7 @@ router.get('/stats', (req, res) => {
     delivered_orders: deliveredOrders,
     total_users: totalUsers,
     total_products: totalProducts,
+    available_products: availableProducts,
     cod_orders: codOrders,
     online_orders: onlineOrders,
     unread_messages: unreadMessages,
@@ -155,6 +157,14 @@ router.patch('/orders/:id/payment', (req, res) => {
 });
 
 // ---------- Products ----------
+function normImages(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map(x => String(x || '').trim()).filter(Boolean).slice(0, 5);
+}
+function imagesOfProduct(p) {
+  try { const a = JSON.parse(p.images || '[]'); return Array.isArray(a) ? a.filter(Boolean).slice(0, 5) : []; } catch (e) { return []; }
+}
+
 router.get('/products', (req, res) => {
   const rows = db.prepare(`
     SELECT p.*, c.slug AS category_slug, c.name AS category_name
@@ -167,12 +177,21 @@ router.get('/products', (req, res) => {
 router.post('/products', (req, res) => {
   const p = req.body || {};
   if (!p.name || !p.price || !p.category_id) return res.status(400).json({ error: 'Name, price and category are required' });
+  const imgs = normImages(p.images);
+  if (!imgs.length && p.image) imgs.push(String(p.image).trim());
   const info = db.prepare(`
-    INSERT INTO products (sku, name, category_id, description, price, mrp, image, stock, active, featured)
-    VALUES (?,?,?,?,?,?,?,?,1,?)
-  `).run(p.sku || '', p.name, p.category_id, p.description || '', +p.price, p.mrp || +p.price, p.image || '', p.stock ?? 100, p.featured ? 1 : 0);
+    INSERT INTO products (sku, name, category_id, description, price, mrp, image, images, stock, available, active, featured, checklist, instructions)
+    VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?)
+  `).run(
+    p.sku || '', p.name, p.category_id, p.description || '', +p.price, p.mrp || +p.price,
+    imgs[0] || '', JSON.stringify(imgs), p.stock ?? 100,
+    p.available === undefined ? 1 : (p.available ? 1 : 0),
+    p.featured ? 1 : 0,
+    JSON.stringify(Array.isArray(p.checklist) ? p.checklist : []),
+    JSON.stringify(Array.isArray(p.instructions) ? p.instructions : [])
+  );
 
-  const product = productToView(db.prepare(`SELECT p.*, c.name AS category_name FROM products p JOIN categories c ON c.id=p.category_id WHERE p.id=?`).get(info.lastInsertRowid));
+  const product = productToView(db.prepare(`SELECT p.*, c.name AS category_name, c.slug AS category_slug FROM products p JOIN categories c ON c.id=p.category_id WHERE p.id=?`).get(info.lastInsertRowid));
   const io = req.app.get('io');
   if (io) io.emit('product:changed', { action: 'created', product });
   res.status(201).json({ ok: true, product });
@@ -183,15 +202,21 @@ router.patch('/products/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM products WHERE id=?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Product not found' });
 
+  const imgs = p.images !== undefined ? normImages(p.images) : imagesOfProduct(existing);
+  const primary = imgs[0] || (p.image !== undefined ? String(p.image).trim() : existing.image);
+
   db.prepare(`
     UPDATE products SET
-      sku=?, name=?, category_id=?, description=?, price=?, mrp=?, image=?, stock=?, active=?, featured=?, checklist=?, instructions=?, updated_at=datetime('now')
+      sku=?, name=?, category_id=?, description=?, price=?, mrp=?, image=?, images=?, stock=?, available=?, active=?, featured=?, checklist=?, instructions=?, updated_at=datetime('now')
     WHERE id=?
   `).run(
     p.sku ?? existing.sku, p.name ?? existing.name, p.category_id ?? existing.category_id,
     p.description ?? existing.description, +(p.price ?? existing.price), +(p.mrp ?? existing.mrp ?? existing.price),
-    p.image ?? existing.image, +(p.stock ?? existing.stock), p.active === undefined ? existing.active : (p.active ? 1 : 0),
-    p.featured ? 1 : 0,
+    primary, JSON.stringify(imgs),
+    +(p.stock ?? existing.stock),
+    p.available === undefined ? (existing.available ?? 1) : (p.available ? 1 : 0),
+    p.active === undefined ? existing.active : (p.active ? 1 : 0),
+    p.featured === undefined ? (existing.featured ? 1 : 0) : (p.featured ? 1 : 0),
     p.checklist !== undefined ? JSON.stringify(p.checklist) : existing.checklist,
     p.instructions !== undefined ? JSON.stringify(p.instructions) : existing.instructions,
     existing.id
@@ -208,7 +233,7 @@ router.delete('/products/:id', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Product not found' });
   db.prepare(`UPDATE products SET active=0, updated_at=datetime('now') WHERE id=?`).run(existing.id);
   const io = req.app.get('io');
-  if (io) io.emit('product:changed', { action: 'deleted', id: existing.id });
+  if (io) io.emit('product:changed', { action: 'deleted', id: existing.id, productId: existing.id });
   res.json({ ok: true });
 });
 

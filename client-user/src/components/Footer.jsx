@@ -16,7 +16,7 @@ export default function Footer() {
         <div className="footer-grid">
           <div className="ft-brand">
             <div className="brand">
-              <span className="logo"><Icon name="lamp" size={26} /></span>
+              <span className="logo"><img src="/logo.jpeg" alt="DevaMart" /></span>
               <span><h1>DevaMart</h1><small>Puja &amp; Astrology</small></span>
             </div>
             <p>Authentic puja kits, idols, rudraksha and healing crystals — delivered with respect to your rituals. Serving devotees across India.</p>

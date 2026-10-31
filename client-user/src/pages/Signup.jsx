@@ -29,7 +29,7 @@ export default function Signup() {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <div className="logo-big"><Icon name="sun" size={32} /></div>
+        <div className="logo-big"><img src="/logo.jpeg" alt="DevaMart" /></div>
         <h2>Create Account</h2>
         <p className="muted-center">Join DevaMart to shop &amp; track orders</p>
         {err && <div className="alert err">{err}</div>}

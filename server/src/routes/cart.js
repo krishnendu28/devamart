@@ -9,7 +9,7 @@ router.use(requireAuth('user'));
 // GET /api/cart - returns cart items with product details and total
 router.get('/', (req, res) => {
   const rows = db.prepare(`
-    SELECT ci.id, ci.qty, p.id AS product_id, p.name, p.price, p.mrp, p.image, c.slug AS category_slug
+    SELECT ci.id, ci.qty, p.id AS product_id, p.name, p.price, p.mrp, p.image, p.images, p.available, p.stock, c.slug AS category_slug
     FROM cart_items ci
     JOIN products p ON p.id = ci.product_id
     JOIN categories c ON c.id = p.category_id
@@ -26,6 +26,7 @@ router.post('/', (req, res) => {
   const { productId, qty = 1 } = req.body || {};
   const product = db.prepare('SELECT * FROM products WHERE id=? AND active=1').get(productId);
   if (!product) return res.status(404).json({ error: 'Product not found' });
+  if (Number(product.available) === 0) return res.status(400).json({ error: 'This product is currently unavailable' });
   const add = Math.max(1, parseInt(qty, 10) || 1);
 
   const existing = db.prepare('SELECT * FROM cart_items WHERE user_id=? AND product_id=?').get(req.user.id, productId);

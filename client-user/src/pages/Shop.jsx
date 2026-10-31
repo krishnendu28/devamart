@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, getSocket } from '../api';
 import ProductCard from '../components/ProductCard';
 import Icon from '../components/Icons';
 
@@ -26,17 +26,31 @@ export default function Shop() {
     api('/api/categories', { auth: false }).then(setCategories).catch(() => {});
   }, []);
 
-  useEffect(() => {
+  const loadProducts = useCallback(() => {
     setLoading(true);
     const sp = new URLSearchParams();
     if (category && category !== 'all') sp.set('category', category);
     if (q) sp.set('q', q);
     if (sort !== 'default') sp.set('sort', sort);
-    api(`/api/products?${sp.toString()}`, { auth: false })
+    return api(`/api/products?${sp.toString()}`, { auth: false })
       .then(setProducts)
       .catch(() => setProducts([]))
       .finally(() => setLoading(false));
   }, [category, q, sort]);
+
+  useEffect(() => { loadProducts(); }, [loadProducts]);
+
+  // Realtime: admin edits/deletes, price or availability changes appear instantly.
+  useEffect(() => {
+    const s = getSocket();
+    const on = () => {
+      loadProducts();
+      api('/api/categories', { auth: false }).then(setCategories).catch(() => {});
+    };
+    s.on('product:changed', on);
+    s.on('categories:changed', on);
+    return () => { s.off('product:changed', on); s.off('categories:changed', on); };
+  }, [loadProducts]);
 
   function setParam(key, value) {
     const next = new URLSearchParams(params);

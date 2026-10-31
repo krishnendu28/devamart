@@ -50,7 +50,9 @@ CREATE TABLE IF NOT EXISTS products (
   price REAL NOT NULL,
   mrp REAL,
   image TEXT DEFAULT '',
+  images TEXT DEFAULT '[]',
   stock INTEGER DEFAULT 100,
+  available INTEGER DEFAULT 1,
   active INTEGER DEFAULT 1,
   featured INTEGER DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -147,6 +149,8 @@ CREATE TABLE IF NOT EXISTS chatbot_messages (
 const productCols = db.prepare('PRAGMA table_info(products)').all().map((c) => c.name);
 if (!productCols.includes('checklist')) db.exec("ALTER TABLE products ADD COLUMN checklist TEXT DEFAULT '[]'");
 if (!productCols.includes('instructions')) db.exec("ALTER TABLE products ADD COLUMN instructions TEXT DEFAULT '[]'");
+if (!productCols.includes('images')) db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT '[]'");
+if (!productCols.includes('available')) db.exec('ALTER TABLE products ADD COLUMN available INTEGER DEFAULT 1');
 
 // Migration: customer note on orders + read flag on contact messages
 const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);

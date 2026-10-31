@@ -37,6 +37,7 @@ export default function Dashboard() {
     s.on('order:new', live);
     s.on('order:updated', () => { refresh(); });
     s.on('payment:confirmed', (p) => { if (p) toast(`Payment confirmed ${money(p.amount)} · ${p.order_no}`); refresh(); });
+    s.on('product:changed', () => { refresh(); });
     return () => s.close();
   }, []);
 
@@ -45,8 +46,9 @@ export default function Dashboard() {
   const cards = [
     { lbl: 'Revenue Today', val: money(stats.revenue_today), ic: 'banknote', cls: 'red', tip: 'All orders placed today (COD + online)' },
     { lbl: 'Revenue This Month', val: money(stats.revenue_month), ic: 'gem', cls: 'gold', tip: 'All orders placed this month (COD + online)' },
-    { lbl: 'Received (All Time)', val: money(stats.total_sales), ic: 'landmark', cls: 'purple', tip: 'Payments actually received' },
-    { lbl: 'Total Orders', val: stats.total_orders, ic: 'cart', cls: 'green', tip: 'Including COD & online' },
+    { lbl: 'Total Income (All Time)', val: money(stats.total_revenue), ic: 'landmark', cls: 'purple', tip: 'Value of every order ever placed' },
+    { lbl: 'Received (All Time)', val: money(stats.total_sales), ic: 'banknote', cls: 'green', tip: 'Payments actually received' },
+    { lbl: 'Total Orders', val: stats.total_orders, ic: 'cart', cls: 'blue', tip: 'Including COD & online' },
   ];
 
   const cards2 = [
@@ -73,7 +75,7 @@ export default function Dashboard() {
         <a className="btn sm ghost" href="/orders" style={{ marginLeft: 'auto' }}>View Orders</a>
       </div>
 
-      <div className="cards">
+      <div className="cards five">
         {cards.map(c => (
           <div className="card" key={c.lbl} title={c.tip}>
             <span className={`ic ${c.cls}`}><Icon name={c.ic} size={22} /></span>

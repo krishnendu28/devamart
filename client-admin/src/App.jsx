@@ -45,7 +45,7 @@ function WithLayout({ title, sub, children }) {
     <div className="admin">
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="brand">
-          <span className="logo"><Icon name="om" size={22} /></span>
+          <span className="logo"><img src="/logo.jpeg" alt="DevaMart" /></span>
           <span><b>DevaMart</b><small>Admin Panel</small></span>
         </div>
         <nav>

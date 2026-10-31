@@ -126,6 +126,9 @@ header.site {
   animation: logoshine 3.6s ease-in-out infinite;
 }
 @keyframes logoshine { 0%, 55% { left: -120%; } 100% { left: 170%; } }
+.brand .logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.drawer-head .logo img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
+.auth-card .logo-big img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
 .brand h1 {
   font-size: 1.5rem; margin: 0; line-height: 1.05; font-weight: 700;
   background: linear-gradient(100deg, var(--gold-2) 10%, var(--gold) 50%, var(--accent));
@@ -424,6 +427,14 @@ header.site {
 .detail.two { gap: 26px; }
 .detail .gallery { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 18px; box-shadow: var(--sh); }
 .detail .gallery img { border-radius: 16px; width: 100%; }
+.gallery-thumbs { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; padding-bottom: 2px; }
+.gallery-thumbs button {
+  flex: 0 0 auto; width: 64px; height: 64px; padding: 0; border-radius: 11px; overflow: hidden;
+  border: 2px solid transparent; background: rgba(255, 255, 255, .06); cursor: pointer; transition: .15s;
+}
+.gallery-thumbs button.on { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(212, 175, 55, .18); }
+.gallery-thumbs button:hover { border-color: rgba(212, 175, 55, .6); }
+.detail .gallery-thumbs img { width: 100%; height: 100%; object-fit: cover; border-radius: 7px; display: block; }
 .pd-head { display: flex; align-items: flex-start; gap: 12px; justify-content: space-between; }
 .detail h2 { font-size: 1.8rem; color: var(--ink); margin-bottom: 6px; }
 .detail .price-big { font-size: 2.2rem; font-weight: 700; color: var(--gold-2); font-family: var(--font-d); }

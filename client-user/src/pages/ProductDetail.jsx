@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { api, money } from '../api';
+import { api, getSocket, money } from '../api';
 import { useCart } from '../context/CartContext';
 import { useFavorites } from '../context/FavoritesContext';
 import { toast } from '../components/Toast';
@@ -13,6 +13,7 @@ export default function ProductDetail() {
   const [related, setRelated] = useState([]);
   const [qty, setQty] = useState(1);
   const [missing, setMissing] = useState(false);
+  const [activeImg, setActiveImg] = useState('');
   const { add, busy } = useCart();
   const { has, toggle } = useFavorites();
   const navigate = useNavigate();
@@ -23,10 +24,36 @@ export default function ProductDetail() {
     api(`/api/products/${id}`, { auth: false })
       .then(p => {
         setProduct(p);
+        setActiveImg(p.image);
         return api(`/api/products?category=${p.category_slug}`, { auth: false });
       })
       .then(rel => setRelated(rel.filter(r => r.id !== Number(id)).slice(0, 4)))
       .catch(() => setMissing(true));
+  }, [id]);
+
+  // Realtime: admin price, description, images and availability changes.
+  useEffect(() => {
+    const s = getSocket();
+    const on = (e) => {
+      if (!e) return;
+      if (e.action === 'deleted') {
+        if (Number(e.productId ?? e.id) === Number(id)) setMissing(true);
+        setRelated(prev => prev.filter(r => Number(r.id) !== Number(e.productId ?? e.id)));
+        return;
+      }
+      const p = e.product;
+      if (p && Number(p.id) === Number(id)) {
+        setProduct(p);
+        setActiveImg(p.image);
+      }
+      if (p && p.category_slug) {
+        api(`/api/products?category=${p.category_slug}`, { auth: false })
+          .then(rel => setRelated(rel.filter(r => r.id !== Number(id)).slice(0, 4)))
+          .catch(() => {});
+      }
+    };
+    s.on('product:changed', on);
+    return () => s.off('product:changed', on);
   }, [id]);
 
   async function handleAdd() {
@@ -60,7 +87,22 @@ export default function ProductDetail() {
       </nav>
       <div className="detail">
         <div className="gallery">
-          <img src={product.image} alt={product.name} />
+          <img src={activeImg || product.image} alt={product.name} />
+          {(product.images || []).length > 1 && (
+            <div className="gallery-thumbs">
+              {(product.images || []).map((src, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={(activeImg || product.image) === src ? 'on' : ''}
+                  onClick={() => setActiveImg(src)}
+                  aria-label={`Image ${i + 1}`}
+                >
+                  <img src={src} alt="" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <span className="cat" style={{ fontWeight: 700, letterSpacing: 1.5, textTransform: 'uppercase', fontSize: '.78rem' }}>{product.category_name}</span>
@@ -103,7 +145,7 @@ export default function ProductDetail() {
             </>
           )}
 
-          {product.stock > 0 ? (
+          {product.available !== 0 && product.stock > 0 ? (
             <div className="row mt">
               <span className="small muted" style={{ marginRight: 4 }}>Qty:</span>
               <div className="qty">
@@ -111,13 +153,15 @@ export default function ProductDetail() {
                 <span>{qty}</span>
                 <button onClick={() => setQty(q => Math.min(Math.max(10, product.stock), q + 1))}>+</button>
               </div>
-              <button className="btn" disabled={busy || product.stock === 0} onClick={handleAdd}>
+              <button className="btn" disabled={busy} onClick={handleAdd}>
                 {busy ? 'Adding…' : 'Add to Cart'}
               </button>
-              <button className="btn gold" disabled={busy || product.stock === 0} onClick={async () => { await handleAdd(); navigate('/checkout'); }}>
+              <button className="btn gold" disabled={busy} onClick={async () => { await handleAdd(); navigate('/checkout'); }}>
                 Buy Now
               </button>
             </div>
+          ) : product.available === 0 ? (
+            <div className="alert err">This product is currently unavailable. Please check back soon or browse similar items below.</div>
           ) : (
             <div className="alert err">This product is currently out of stock.</div>
           )}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { money } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -19,13 +19,20 @@ export default function ProductCard({ product }) {
   const off = product.mrp && product.mrp > product.price
     ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
     : 0;
-  const [img, setImg] = useState(product.image || CAT_PHOTO[product.category_slug]);
+  const [img, setImg] = useState((product.images && product.images[0]) || product.image || CAT_PHOTO[product.category_slug]);
   const { user } = useAuth();
   const { add, busy } = useCart();
   const { has, toggle } = useFavorites();
   const navigate = useNavigate();
 
   const fav = has(product.id);
+  const unavailable = product.available === 0;
+  const soldOut = product.stock === 0;
+
+  // Realtime image/price changes from the admin panel.
+  useEffect(() => {
+    setImg((product.images && product.images[0]) || product.image || CAT_PHOTO[product.category_slug]);
+  }, [product.image, product.images, product.category_slug]);
 
   function onFav(e) {
     e.preventDefault();
@@ -37,7 +44,8 @@ export default function ProductCard({ product }) {
   function onAdd(e) {
     e.preventDefault();
     e.stopPropagation();
-    if (product.stock === 0) { toast('Out of stock right now'); return; }
+    if (unavailable) { toast('This product is currently unavailable'); return; }
+    if (soldOut) { toast('Out of stock right now'); return; }
     if (!user) { toast('Please login to add items to cart'); navigate('/login'); return; }
     add(product.id, 1).then(ok => { if (ok) toast(`Added to cart · ${product.name}`); });
   }
@@ -58,8 +66,8 @@ export default function ProductCard({ product }) {
       <div className="body">
         <span className="cat">{product.category_name || product.category}</span>
         <h3>{product.name}</h3>
-        {product.stock === 0 ? (
-          <span className="stock-out">Out of stock</span>
+        {product.stock === 0 || unavailable ? (
+          <span className="stock-out">{unavailable ? 'Unavailable' : 'Out of stock'}</span>
         ) : (
           <div className="price-row">
             <span className="price">{money(product.price)}</span>
@@ -67,8 +75,8 @@ export default function ProductCard({ product }) {
             {off > 0 && <span className="off">save {off}%</span>}
           </div>
         )}
-        <button className="btn add-btn" disabled={busy || product.stock === 0} onClick={onAdd}>
-          {busy ? 'Adding…' : product.stock === 0 ? 'Sold out' : '+ Add to Cart'}
+        <button className="btn add-btn" disabled={busy || soldOut || unavailable} onClick={onAdd}>
+          {busy ? 'Adding…' : unavailable ? 'Unavailable' : soldOut ? 'Sold out' : '+ Add to Cart'}
         </button>
       </div>
     </Link>

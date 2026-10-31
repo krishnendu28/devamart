@@ -47,7 +47,7 @@ export default function TrackOrder() {
     if (!data || data.status === 'delivered' || data.status === 'cancelled') return;
     setLive(true);
     const socket = connectSocket(getToken());
-    socket.on('order:updated', (o) => {
+    const onUpdate = (o) => {
       if (o.order_no === data.order_no) {
         setData(d => ({ ...d, status: o.status, status_label: o.status_label, updated_at: o.updated_at,
           progress: d.progress.map(p => {
@@ -56,8 +56,9 @@ export default function TrackOrder() {
           }),
         }));
       }
-    });
-    return () => socket.close();
+    };
+    socket.on('order:updated', onUpdate);
+    return () => socket.off('order:updated', onUpdate);
   }, [data?.order_no]);
 
   const stepIndex = STEPS.findIndex(s => s.key === data?.status);

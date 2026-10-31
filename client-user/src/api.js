@@ -29,10 +29,18 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
 
 export const imgUrl = (p) => (p && p.image ? p.image : '');
 
+let sharedSocket = null;
+
 export function connectSocket(token) {
-  const socket = io(API || window.location.origin, { transports: ['websocket', 'polling'] });
-  if (token) socket.emit('join-user', token);
-  return socket;
+  if (!sharedSocket) {
+    sharedSocket = io(API || window.location.origin, { transports: ['websocket', 'polling'] });
+  }
+  if (token) sharedSocket.emit('join-user', token);
+  return sharedSocket;
+}
+
+export function getSocket() {
+  return connectSocket(getToken());
 }
 
 export const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;

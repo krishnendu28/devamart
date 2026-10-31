@@ -26,7 +26,7 @@ export default function Login() {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <div className="logo"><Icon name="lamp" size={30} /></div>
+        <div className="logo"><img src="/logo.jpeg" alt="DevaMart" /></div>
         <h2>DevaMart Admin</h2>
         <p className="muted-center">Restricted area — authorised staff only</p>
         {err && <div className="alert err">{err}</div>}

@@ -139,9 +139,22 @@ function slugFor(p) {
   return 'default';
 }
 
+function parseImageList(v) {
+  let arr = [];
+  if (Array.isArray(v)) arr = v;
+  else if (typeof v === 'string' && v.trim()) {
+    try { const x = JSON.parse(v); if (Array.isArray(x)) arr = x; } catch (e) { /* ignore */ }
+  }
+  return arr.map(s => String(s || '').trim()).filter(Boolean).slice(0, 5);
+}
+
 function resolveImage(p) {
-  if (p && p.image) return p.image;
-  if (p && p.sku && PRODUCT_PHOTOS[p.sku]) return PRODUCT_PHOTOS[p.sku];
+  if (p) {
+    const multi = parseImageList(p.images);
+    if (multi.length) return multi[0];
+    if (p.image) return p.image;
+    if (p.sku && PRODUCT_PHOTOS[p.sku]) return PRODUCT_PHOTOS[p.sku];
+  }
   const slug = p ? slugFor(p) : 'default';
   const pool = CATEGORY_PHOTOS[slug] || [];
   const key = p ? (p.product_id ?? p.id ?? 1) : 1;
@@ -179,10 +192,19 @@ function parseJson(v) { try { const x = JSON.parse(v); return Array.isArray(x) ?
 
 function productToView(p) {
   if (!p) return p;
-  const view = { ...p, image: resolveImage(p) };
+  let images = parseImageList(p.images);
+  if (!images.length && p.image) images = [String(p.image).trim()];
+  const primary = images[0] || resolveImage(p);
+  if (!images.length && primary) images = [primary];
+  const view = {
+    ...p,
+    image: primary,
+    images: images.slice(0, 5),
+    available: p.available === 0 || p.available === '0' || p.available === false ? 0 : 1,
+  };
   if (p.checklist != null && p.checklist !== '') view.checklist = typeof p.checklist === 'string' ? parseJson(p.checklist) : p.checklist;
   if (p.instructions != null && p.instructions !== '') view.instructions = typeof p.instructions === 'string' ? parseJson(p.instructions) : p.instructions;
   return view;
 }
 
-module.exports = { svgPlaceholder, productToView, resolveImage };
+module.exports = { svgPlaceholder, productToView, resolveImage, parseImageList };

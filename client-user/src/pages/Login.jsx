@@ -30,7 +30,7 @@ export default function Login() {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <div className="logo-big"><Icon name="lamp" size={32} /></div>
+        <div className="logo-big"><img src="/logo.jpeg" alt="DevaMart" /></div>
         <h2>Welcome Back</h2>
         <p className="muted-center">Login to shop puja kits &amp; track your orders</p>
         {err && <div className="alert err">{err}</div>}

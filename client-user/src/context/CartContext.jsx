@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useCallback, useState } from 'react';
-import { api } from '../api';
+import { api, getSocket } from '../api';
 import { useAuth } from './AuthContext';
 
 const CartContext = createContext(null);
@@ -15,6 +15,15 @@ export function CartProvider({ children }) {
   }, [user]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Live catalogue updates (price / image / availability) refresh the cart too.
+  useEffect(() => {
+    const s = getSocket();
+    const on = () => refresh();
+    s.on('product:changed', on);
+    s.on('categories:changed', on);
+    return () => { s.off('product:changed', on); s.off('categories:changed', on); };
+  }, [refresh]);
 
   async function add(productId, qty = 1) {
     setBusy(true);

@@ -58,7 +58,7 @@ export default function Navbar() {
             </button>
 
             <Link to="/" className="brand">
-              <span className="logo"><Icon name="lamp" size={26} /></span>
+              <span className="logo"><img src="/logo.jpeg" alt="DevaMart" /></span>
               <span className="brand-text">
                 <h1>DevaMart</h1>
                 <small>Puja · Astrology · Vastu</small>
@@ -144,7 +144,7 @@ export default function Navbar() {
       <div className={`overlay ${open ? 'show' : ''}`} onClick={() => setOpen(false)} />
       <aside className={`drawer ${open ? 'show' : ''}`}>
         <div className="drawer-head">
-          <div className="logo"><Icon name="lamp" size={26} /></div>
+          <div className="logo"><img src="/logo.jpeg" alt="DevaMart" /></div>
           <h3>{user ? `Namaste, ${user.name.split(' ')[0]}` : 'Welcome to DevaMart'}</h3>
           <p>{user ? user.email : 'Login to shop & track your orders'}</p>
         </div>
