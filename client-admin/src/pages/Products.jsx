@@ -7,7 +7,7 @@ const cleanImages = list => (list || []).map(s => String(s || '').trim()).filter
 
 const blank = {
   id: null, name: '', sku: '', category_id: '', description: '', price: '', mrp: '', stock: 100,
-  image: '', images: emptyImages(), available: 1, featured: 0, active: 1, checklist: [], instructions: [],
+  image: '', images: emptyImages(), available: 1, coming_soon: 0, featured: 0, active: 1, checklist: [], instructions: [],
 };
 
 export default function Products() {
@@ -43,6 +43,7 @@ export default function Products() {
       id: p.id, name: p.name, sku: p.sku || '', category_id: p.category_id, description: p.description,
       price: p.price, mrp: p.mrp || '', stock: p.stock, image: p.image || '', images: imgs,
       available: p.available === 0 ? 0 : 1,
+      coming_soon: p.coming_soon ? 1 : 0,
       featured: p.featured, active: p.active,
       checklist: Array.isArray(p.checklist) ? p.checklist : [], instructions: Array.isArray(p.instructions) ? p.instructions : [],
     });
@@ -67,6 +68,7 @@ export default function Products() {
       description: form.description, price: Number(form.price), mrp: Number(form.mrp || form.price),
       stock: Number(form.stock) || 0, image: imgs[0] || form.image || '', images: imgs,
       available: form.available ? 1 : 0,
+      coming_soon: form.coming_soon ? 1 : 0,
       featured: form.featured ? 1 : 0, active: form.active ? 1 : 0,
     };
     if (isKit()) {
@@ -90,6 +92,12 @@ export default function Products() {
     const next = p.available === 0 ? 1 : 0;
     await api(`/api/admin/products/${p.id}`, { method: 'PATCH', body: { available: next } });
     toast(next ? `"${p.name}" is now AVAILABLE — users see it instantly ✅` : `"${p.name}" marked UNAVAILABLE for users`);
+    await load();
+  }
+  async function toggleComingSoon(p) {
+    const next = p.coming_soon ? 0 : 1;
+    await api(`/api/admin/products/${p.id}`, { method: 'PATCH', body: { coming_soon: next } });
+    toast(next ? `"${p.name}" is now COMING SOON — hidden from users until launch` : `"${p.name}" is live again — users can order it`);
     await load();
   }
   async function remove(p) {
@@ -121,11 +129,11 @@ export default function Products() {
         <div className="table-wrap">
           <table className="tbl">
             <thead>
-              <tr><th>Product</th><th>SKU</th><th>Category</th><th>Price</th><th>MRP</th><th>Stock</th><th>Featured</th><th>Status</th><th>Availability</th><th>Actions</th></tr>
+              <tr><th>Product</th><th>SKU</th><th>Category</th><th>Price</th><th>MRP</th><th>Stock</th><th>Featured</th><th>Status</th><th>Availability</th><th>Coming Soon</th><th>Actions</th></tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={10}><div className="loading">Loading…</div></td></tr>}
-              {!loading && filtered.length === 0 && <tr><td colSpan={10}><div className="empty">No products match.</div></td></tr>}
+              {loading && <tr><td colSpan={11}><div className="loading">Loading…</div></td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={11}><div className="empty">No products match.</div></td></tr>}
               {filtered.map(p => (
                 <tr key={p.id} style={{ opacity: p.active ? 1 : .45 }}>
                   <td>
@@ -155,6 +163,15 @@ export default function Products() {
                       title="Toggle availability for users"
                     >
                       {p.available === 0 ? 'Unavailable' : 'Available'}
+                    </button>
+                  </td>
+                  <td>
+                    <button
+                      className={`btn sm ${p.coming_soon ? 'gold' : 'ghost'}`}
+                      onClick={() => toggleComingSoon(p)}
+                      title="Hide from users and label the product as Coming Soon"
+                    >
+                      {p.coming_soon ? '⏳ Coming Soon' : 'Set Coming Soon'}
                     </button>
                   </td>
                   <td>
@@ -257,6 +274,9 @@ export default function Products() {
                 </label>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '.88rem' }}>
                   <input type="checkbox" checked={!!form.available} onChange={e => setForm(f => ({ ...f, available: e.target.checked ? 1 : 0 }))} /> Available for purchase
+                </label>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '.88rem' }}>
+                  <input type="checkbox" checked={!!form.coming_soon} onChange={e => setForm(f => ({ ...f, coming_soon: e.target.checked ? 1 : 0 }))} /> ⏳ Coming Soon — hide from users until launch
                 </label>
               </div>
               <button className="btn block" disabled={saving}>{saving ? 'Saving…' : form.id ? 'Save Changes' : 'Add Product'}</button>

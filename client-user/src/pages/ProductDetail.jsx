@@ -6,6 +6,8 @@ import { useFavorites } from '../context/FavoritesContext';
 import { toast } from '../components/Toast';
 import Icon from '../components/Icons';
 import ProductCard from '../components/ProductCard';
+import Seo, { productJsonLd } from '../components/Seo';
+import { whatsappLink } from '../components/WhatsAppButton';
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -14,6 +16,7 @@ export default function ProductDetail() {
   const [qty, setQty] = useState(1);
   const [missing, setMissing] = useState(false);
   const [activeImg, setActiveImg] = useState('');
+  const [justAdded, setJustAdded] = useState(false);
   const { add, busy } = useCart();
   const { has, toggle } = useFavorites();
   const navigate = useNavigate();
@@ -58,7 +61,10 @@ export default function ProductDetail() {
 
   async function handleAdd() {
     const ok = await add(product.id, qty);
-    if (ok) toast(`Added ${product.name} to cart`);
+    if (ok) {
+      setJustAdded(true);
+      toast(`Added ${product.name} to cart`);
+    }
   }
 
   function onFav() {
@@ -74,6 +80,7 @@ export default function ProductDetail() {
 
   const off = product.mrp > product.price ? Math.round(((product.mrp - product.price) / product.mrp) * 100) : 0;
   const isKit = product.category_slug === 'puja-samagri-kits';
+  const comingSoon = product.coming_soon === 1;
 
   let checklist = [];
   let steps = [];
@@ -82,6 +89,14 @@ export default function ProductDetail() {
 
   return (
     <div className="container page">
+      <Seo
+        title={product.name}
+        description={(product.description || '').slice(0, 158) || `Buy ${product.name} online at DevaMart with authentic quality, COD & UPI and fast delivery across India.`}
+        path={`/product/${product.id}`}
+        image={(product.images && product.images[0]) || product.image}
+        jsonLd={productJsonLd(product)}
+        type="product"
+      />
       <nav className="small muted mb" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <Link to="/" style={{ color: 'inherit' }}>Home</Link> / <Link to="/shop" style={{ color: 'inherit' }}>Shop</Link> / <Link to={`/shop?category=${product.category_slug}`} style={{ color: 'inherit' }}>{product.category_name}</Link>
       </nav>
@@ -117,7 +132,6 @@ export default function ProductDetail() {
             {off > 0 && <span className="off" style={{ color: 'var(--green)', fontWeight: 700 }}>{off}% OFF</span>}
           </div>
           <span className="muted small" style={{ display: 'block', marginBottom: 12 }}>+ free delivery on orders above ₹499 · COD &amp; UPI available</span>
-
           <p className="desc">{product.description}</p>
           {isKit && (
             <>
@@ -145,21 +159,51 @@ export default function ProductDetail() {
             </>
           )}
 
-          {product.available !== 0 && product.stock > 0 ? (
-            <div className="row mt">
-              <span className="small muted" style={{ marginRight: 4 }}>Qty:</span>
-              <div className="qty">
-                <button onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
-                <span>{qty}</span>
-                <button onClick={() => setQty(q => Math.min(Math.max(10, product.stock), q + 1))}>+</button>
-              </div>
-              <button className="btn" disabled={busy} onClick={handleAdd}>
-                {busy ? 'Adding…' : 'Add to Cart'}
-              </button>
-              <button className="btn gold" disabled={busy} onClick={async () => { await handleAdd(); navigate('/checkout'); }}>
-                Buy Now
-              </button>
+          {comingSoon ? (
+            <div className="coming-soon-box">
+              <span className="cs-badge">Coming Soon</span>
+              <b>Launching very soon</b>
+              <p>This product is not yet available to order. Message us on WhatsApp and we will let you know the moment it goes live.</p>
+              <a
+                className="btn wa"
+                href={whatsappLink(`Namaste DevaMart! Please notify me when "${product.name}" is available.`)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Icon name="chat" size={17} /> Notify me on WhatsApp
+              </a>
             </div>
+          ) : product.available !== 0 && product.stock > 0 ? (
+            <>
+              <div className="row mt">
+                <span className="small muted" style={{ marginRight: 4 }}>Qty:</span>
+                <div className="qty">
+                  <button onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
+                  <span>{qty}</span>
+                  <button onClick={() => setQty(q => Math.min(Math.max(10, product.stock), q + 1))}>+</button>
+                </div>
+                <button className="btn" disabled={busy} onClick={handleAdd}>
+                  {busy ? 'Adding…' : 'Add to Cart'}
+                </button>
+                <button className="btn gold" disabled={busy} onClick={async () => { await handleAdd(); navigate('/checkout'); }}>
+                  Buy Now
+                </button>
+              </div>
+              {justAdded && (
+                <div className="proceed-box">
+                  <span><Icon name="check" size={16} /> Added to your cart</span>
+                  <button className="btn block" onClick={() => navigate('/checkout')}>Proceed to Checkout →</button>
+                </div>
+              )}
+              <a
+                className="wa-inline"
+                href={whatsappLink(`Namaste DevaMart! I am interested in "${product.name}". Please share details.`)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Icon name="chat" size={15} /> Ask about this product on WhatsApp · +91 90381 50556
+              </a>
+            </>
           ) : product.available === 0 ? (
             <div className="alert err">This product is currently unavailable. Please check back soon or browse similar items below.</div>
           ) : (

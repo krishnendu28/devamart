@@ -1,14 +1,28 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { money } from '../api';
 import { toast } from '../components/Toast';
+import CitySelect from '../components/CitySelect';
+import { getSavedCity, saveCity } from '../data/cityPref';
+import { stateForCity } from '../data/cities';
 import Icon from '../components/Icons';
 
 export default function CartPage() {
   const { cart, busy, update, remove } = useCart();
   const navigate = useNavigate();
+  const [city, setCity] = useState(getSavedCity());
   const shipping = cart.total >= 499 || cart.total === 0 ? 0 : 49;
   const grand = cart.total + shipping;
+
+  function chooseCity(next, state) {
+    setCity(next);
+    saveCity(next);
+    try {
+      const prev = JSON.parse(localStorage.getItem('dm_checkout_address') || '{}');
+      localStorage.setItem('dm_checkout_address', JSON.stringify({ ...prev, city: next, state: state ?? prev.state ?? stateForCity(next) }));
+    } catch (e) { /* ignore */ }
+  }
 
   async function handleUpdate(itemId, qty) {
     if (qty < 1) return;
@@ -31,6 +45,18 @@ export default function CartPage() {
   return (
     <div className="container page">
       <div className="section-title"><h2>My Cart</h2><span className="sub">{cart.count} item{cart.count !== 1 ? 's' : ''}</span></div>
+
+      <div className="deliver-bar">
+        <span className="deliver-ic"><Icon name="truck" size={20} /></span>
+        <div className="deliver-city">
+          <label htmlFor="cart-city">Delivering to</label>
+          <CitySelect value={city} onChange={chooseCity} id="cart-city" />
+        </div>
+        <span className="deliver-note">
+          {city ? `Delivery available in ${city}` : 'Choose your city for accurate delivery estimates'}
+        </span>
+      </div>
+
       <div className="cart-layout">
         <div>
           {cart.items.map(it => (
@@ -59,6 +85,7 @@ export default function CartPage() {
           <h3 style={{ color: 'var(--red-dark)', marginBottom: 6 }}>Order Summary</h3>
           <div className="row sub"><span>Subtotal</span><span>{money(cart.total)}</span></div>
           <div className="row sub"><span>Shipping</span><span>{shipping === 0 ? 'FREE' : money(shipping)}</span></div>
+          {city && <div className="row sub"><span>Deliver to</span><span>{city}</span></div>}
           <div className="row total"><span>Total</span><span>{money(grand)}</span></div>
           {shipping > 0 && <div className="alert info" style={{ fontSize: '.8rem', padding: '8px 10px' }}>Add {money(499 - cart.total)} more for FREE delivery</div>}
           <button className="btn block mt" disabled={busy} onClick={() => navigate('/checkout')}>Proceed to Checkout →</button>

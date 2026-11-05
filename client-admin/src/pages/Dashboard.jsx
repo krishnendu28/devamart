@@ -44,8 +44,8 @@ export default function Dashboard() {
   if (loading && !stats) return <div className="loading">Loading dashboard…</div>;
 
   const cards = [
-    { lbl: 'Revenue Today', val: money(stats.revenue_today), ic: 'banknote', cls: 'red', tip: 'All orders placed today (COD + online)' },
-    { lbl: 'Revenue This Month', val: money(stats.revenue_month), ic: 'gem', cls: 'gold', tip: 'All orders placed this month (COD + online)' },
+    { lbl: 'Revenue Today', val: money(stats.revenue_today), ic: 'banknote', cls: 'red', tip: `Locked for ${stats.locked_day || 'today'} (IST). Refreshing does not change it; a new day starts after 12 AM IST.` },
+    { lbl: 'Revenue This Month', val: money(stats.revenue_month), ic: 'gem', cls: 'gold', tip: 'Locked figure for this month. Recalculated only when an order is placed or updated.' },
     { lbl: 'Total Income (All Time)', val: money(stats.total_revenue), ic: 'landmark', cls: 'purple', tip: 'Value of every order ever placed' },
     { lbl: 'Received (All Time)', val: money(stats.total_sales), ic: 'banknote', cls: 'green', tip: 'Payments actually received' },
     { lbl: 'Total Orders', val: stats.total_orders, ic: 'cart', cls: 'blue', tip: 'Including COD & online' },
@@ -73,6 +73,12 @@ export default function Dashboard() {
           )}
         </span>
         <a className="btn sm ghost" href="/orders" style={{ marginLeft: 'auto' }}>View Orders</a>
+      </div>
+
+     
+
+      <div className="revenue-lock-note">
+        <Icon name="lock" size={15} /> Revenue figures are <b>locked for {stats.locked_day || 'today'} (IST)</b>. They only change when a new order or payment is recorded and reset for the new day after <b>12:00 AM IST</b>.
       </div>
 
       <div className="cards five">

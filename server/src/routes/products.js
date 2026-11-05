@@ -8,7 +8,7 @@ const router = express.Router();
 const CAT_SELECT = `
   SELECT p.*, c.slug AS category_slug, c.name AS category_name, c.icon AS category_icon
   FROM products p JOIN categories c ON c.id = p.category_id
-  WHERE p.active = 1 AND COALESCE(p.available, 1) = 1
+  WHERE p.active = 1 AND COALESCE(p.available, 1) = 1 AND COALESCE(p.coming_soon, 0) = 0
 `;
 
 function list(query, params) {
@@ -25,7 +25,7 @@ router.get('/banners', (req, res) => {
 router.get('/categories', (req, res) => {
   const cats = db.prepare(`
     SELECT c.*, COUNT(p.id) AS product_count
-    FROM categories c LEFT JOIN products p ON p.category_id = c.id AND p.active = 1 AND COALESCE(p.available, 1) = 1
+    FROM categories c LEFT JOIN products p ON p.category_id = c.id AND p.active = 1 AND COALESCE(p.available, 1) = 1 AND COALESCE(p.coming_soon, 0) = 0
     WHERE c.active = 1
     GROUP BY c.id ORDER BY c.id
   `).all();

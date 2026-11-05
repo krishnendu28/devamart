@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'user',
+  city TEXT,
+  last_login_at TEXT,
+  last_login_ip TEXT,
+  login_count INTEGER DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -53,6 +57,7 @@ CREATE TABLE IF NOT EXISTS products (
   images TEXT DEFAULT '[]',
   stock INTEGER DEFAULT 100,
   available INTEGER DEFAULT 1,
+  coming_soon INTEGER DEFAULT 0,
   active INTEGER DEFAULT 1,
   featured INTEGER DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -143,6 +148,36 @@ CREATE TABLE IF NOT EXISTS chatbot_messages (
   message TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Saved delivery addresses (checkout "Save Address")
+CREATE TABLE IF NOT EXISTS addresses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  label TEXT DEFAULT 'Home',
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  line TEXT NOT NULL,
+  line2 TEXT DEFAULT '',
+  city TEXT NOT NULL,
+  state TEXT NOT NULL,
+  pincode TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Revenue figures locked per calendar day (Asia/Kolkata) so refreshing the
+-- admin dashboard does not change the numbers. A new day starts a new row.
+CREATE TABLE IF NOT EXISTS daily_totals (
+  day TEXT PRIMARY KEY,
+  revenue_today REAL DEFAULT 0,
+  revenue_month REAL DEFAULT 0,
+  total_revenue REAL DEFAULT 0,
+  total_sales REAL DEFAULT 0,
+  cod_outstanding REAL DEFAULT 0,
+  today_orders INTEGER DEFAULT 0,
+  month_orders INTEGER DEFAULT 0,
+  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `);
 
 // Lightweight migration: kit checklist + instructions for older databases
@@ -151,6 +186,22 @@ if (!productCols.includes('checklist')) db.exec("ALTER TABLE products ADD COLUMN
 if (!productCols.includes('instructions')) db.exec("ALTER TABLE products ADD COLUMN instructions TEXT DEFAULT '[]'");
 if (!productCols.includes('images')) db.exec("ALTER TABLE products ADD COLUMN images TEXT DEFAULT '[]'");
 if (!productCols.includes('available')) db.exec('ALTER TABLE products ADD COLUMN available INTEGER DEFAULT 1');
+if (!productCols.includes('coming_soon')) db.exec('ALTER TABLE products ADD COLUMN coming_soon INTEGER DEFAULT 0');
+
+// Migration: customer profile fields used by the admin Customers list
+const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+if (!userCols.includes('city')) db.exec('ALTER TABLE users ADD COLUMN city TEXT');
+if (!userCols.includes('last_login_at')) db.exec('ALTER TABLE users ADD COLUMN last_login_at TEXT');
+if (!userCols.includes('last_login_ip')) db.exec('ALTER TABLE users ADD COLUMN last_login_ip TEXT');
+if (!userCols.includes('login_count')) db.exec('ALTER TABLE users ADD COLUMN login_count INTEGER DEFAULT 0');
+
+// Case-insensitive e-mail lookups (signup/login) even for legacy rows.
+try {
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email))');
+} catch (e) {
+  // A legacy database may already contain duplicate addresses; normalisation
+  // in the auth routes still protects new accounts.
+}
 
 // Migration: customer note on orders + read flag on contact messages
 const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);

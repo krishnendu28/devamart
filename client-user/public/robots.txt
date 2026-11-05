@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /cart
+Disallow: /checkout
+Disallow: /payment/
+Disallow: /orders
+Disallow: /login
+Disallow: /signup
+Disallow: /track
+
+Sitemap: https://devamart-shop.vercel.app/sitemap.xml

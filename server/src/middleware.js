@@ -2,7 +2,11 @@ const { verifyToken } = require('./auth');
 
 function publicUser(row) {
   if (!row) return null;
-  return { id: row.id, name: row.name, phone: row.phone, email: row.email, role: row.role, created_at: row.created_at };
+  return {
+    id: row.id, name: row.name, phone: row.phone, email: row.email, role: row.role,
+    city: row.city || '', last_login_at: row.last_login_at || null,
+    login_count: row.login_count || 0, created_at: row.created_at,
+  };
 }
 
 function requireAuth(role) {

@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { getAnswer, welcome } = require('../chatbot');
+const { rateLimit } = require('../security');
 
 const router = express.Router();
 
@@ -8,7 +9,7 @@ const router = express.Router();
 router.get('/welcome', (req, res) => res.json(welcome()));
 
 // POST /api/chat { message, userId? }
-router.post('/', (req, res) => {
+router.post('/', rateLimit({ windowMs: 60 * 1000, max: 30, message: 'Please slow down a little.' }), (req, res) => {
   const { message, userId } = req.body || {};
   if (!message || !String(message).trim()) return res.status(400).json({ error: 'Message is required' });
 

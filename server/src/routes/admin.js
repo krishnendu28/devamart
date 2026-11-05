@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../middleware');
 const { productToView } = require('../images');
+const { getDailyTotals, refreshDailyTotals, todayIST } = require('../daily');
 
 const router = express.Router();
 router.use((req, res, next) => {
@@ -12,9 +13,6 @@ const { orderView } = require('./orders');
 
 // ---------- Dashboard ----------
 router.get('/stats', (req, res) => {
-  const today = new Date();
-  const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
   // Revenue counts every non-cancelled order (COD included), based on when it was placed.
   const revenueToday = db.prepare(`
     SELECT COALESCE(SUM(total),0) AS v FROM orders
@@ -57,7 +55,8 @@ router.get('/stats', (req, res) => {
   const deliveredOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE status='delivered'`).get().c;
   const totalUsers = db.prepare(`SELECT COUNT(*) c FROM users WHERE role='user'`).get().c;
   const totalProducts = db.prepare(`SELECT COUNT(*) c FROM products`).get().c;
-  const availableProducts = db.prepare(`SELECT COUNT(*) c FROM products WHERE active=1 AND COALESCE(available,1)=1`).get().c;
+  const availableProducts = db.prepare(`SELECT COUNT(*) c FROM products WHERE active=1 AND COALESCE(available,1)=1 AND COALESCE(coming_soon,0)=0`).get().c;
+  const comingSoonProducts = db.prepare(`SELECT COUNT(*) c FROM products WHERE active=1 AND COALESCE(coming_soon,0)=1`).get().c;
   const codOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE payment_method='cod'`).get().c;
   const onlineOrders = db.prepare(`SELECT COUNT(*) c FROM orders WHERE payment_method='online'`).get().c;
 
@@ -79,9 +78,22 @@ router.get('/stats', (req, res) => {
 
   const unreadMessages = db.prepare(`SELECT COUNT(*) c FROM contact_messages WHERE is_read=0`).get().c;
 
+  // Revenue figures are locked to the current IST day. The row is created on the
+  // first stats load of the day and only recomputed when an order changes, so
+  // refreshing the dashboard never moves the numbers. After midnight IST a new
+  // day (and a new zeroed/rolled row) takes over automatically.
+  let daily = null;
+  try { daily = getDailyTotals(); } catch (e) { /* fall back to live values */ }
+  const locked = daily || null;
+
   res.json({
-    revenue_today: revenueToday,
-    revenue_month: revenueMonth,
+    revenue_today: locked ? locked.revenue_today : revenueToday,
+    revenue_month: locked ? locked.revenue_month : revenueMonth,
+    revenue_today_live: revenueToday,
+    revenue_month_live: revenueMonth,
+    daily_locked: !!locked,
+    locked_day: locked ? locked.locked_day : todayIST(),
+    locked_at: locked ? locked.locked_at : null,
     paid_today: paidToday,
     paid_month: paidMonth,
     month_orders: monthOrders,
@@ -96,6 +108,7 @@ router.get('/stats', (req, res) => {
     total_users: totalUsers,
     total_products: totalProducts,
     available_products: availableProducts,
+    coming_soon_products: comingSoonProducts,
     cod_orders: codOrders,
     online_orders: onlineOrders,
     unread_messages: unreadMessages,
@@ -132,6 +145,7 @@ router.patch('/orders/:id/status', (req, res) => {
   if (!order) return res.status(404).json({ error: 'Order not found' });
 
   db.prepare(`UPDATE orders SET status=?, updated_at=datetime('now') WHERE id=?`).run(status, order.id);
+  try { refreshDailyTotals(); } catch (e) { /* best-effort */ }
   const updated = orderView(db.prepare('SELECT * FROM orders WHERE id=?').get(order.id));
   const io = req.app.get('io');
   if (io) io.emit('order:updated', updated);
@@ -150,6 +164,7 @@ router.patch('/orders/:id/payment', (req, res) => {
     db.prepare(`INSERT INTO payments (order_id, amount, method, gateway, status, paid_at) VALUES (?,?,?,?,?,datetime('now'))`)
       .run(order.id, amountReceived || order.total, 'cod', 'cash', 'paid');
   }
+  try { refreshDailyTotals(); } catch (e) { /* best-effort */ }
   const updated = orderView(db.prepare('SELECT * FROM orders WHERE id=?').get(order.id));
   const io = req.app.get('io');
   if (io) io.emit('order:updated', updated);
@@ -180,12 +195,13 @@ router.post('/products', (req, res) => {
   const imgs = normImages(p.images);
   if (!imgs.length && p.image) imgs.push(String(p.image).trim());
   const info = db.prepare(`
-    INSERT INTO products (sku, name, category_id, description, price, mrp, image, images, stock, available, active, featured, checklist, instructions)
-    VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?)
+    INSERT INTO products (sku, name, category_id, description, price, mrp, image, images, stock, available, coming_soon, active, featured, checklist, instructions)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)
   `).run(
     p.sku || '', p.name, p.category_id, p.description || '', +p.price, p.mrp || +p.price,
     imgs[0] || '', JSON.stringify(imgs), p.stock ?? 100,
     p.available === undefined ? 1 : (p.available ? 1 : 0),
+    p.coming_soon ? 1 : 0,
     p.featured ? 1 : 0,
     JSON.stringify(Array.isArray(p.checklist) ? p.checklist : []),
     JSON.stringify(Array.isArray(p.instructions) ? p.instructions : [])
@@ -207,7 +223,7 @@ router.patch('/products/:id', (req, res) => {
 
   db.prepare(`
     UPDATE products SET
-      sku=?, name=?, category_id=?, description=?, price=?, mrp=?, image=?, images=?, stock=?, available=?, active=?, featured=?, checklist=?, instructions=?, updated_at=datetime('now')
+      sku=?, name=?, category_id=?, description=?, price=?, mrp=?, image=?, images=?, stock=?, available=?, coming_soon=?, active=?, featured=?, checklist=?, instructions=?, updated_at=datetime('now')
     WHERE id=?
   `).run(
     p.sku ?? existing.sku, p.name ?? existing.name, p.category_id ?? existing.category_id,
@@ -215,6 +231,7 @@ router.patch('/products/:id', (req, res) => {
     primary, JSON.stringify(imgs),
     +(p.stock ?? existing.stock),
     p.available === undefined ? (existing.available ?? 1) : (p.available ? 1 : 0),
+    p.coming_soon === undefined ? (existing.coming_soon ? 1 : 0) : (p.coming_soon ? 1 : 0),
     p.active === undefined ? existing.active : (p.active ? 1 : 0),
     p.featured === undefined ? (existing.featured ? 1 : 0) : (p.featured ? 1 : 0),
     p.checklist !== undefined ? JSON.stringify(p.checklist) : existing.checklist,
@@ -266,7 +283,8 @@ router.patch('/categories/:id', (req, res) => {
 // ---------- Customers ----------
 router.get('/customers', (req, res) => {
   const rows = db.prepare(`
-    SELECT u.id, u.name, u.email, u.phone, u.created_at,
+    SELECT u.id, u.name, u.email, u.phone, u.city, u.created_at,
+      u.last_login_at, u.last_login_ip, COALESCE(u.login_count,0) AS login_count,
       (SELECT COUNT(*) FROM orders o WHERE o.user_id=u.id) AS orders_count,
       (SELECT COALESCE(SUM(o.total),0) FROM orders o WHERE o.user_id=u.id AND o.status!='cancelled' AND o.payment_status='paid') AS spent
     FROM users u WHERE u.role='user' ORDER BY u.id DESC

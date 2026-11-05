@@ -4,7 +4,7 @@ export default function Terms() {
   const { data, loading } = useContent('/api/content/terms');
   if (loading) return <div className="loading">Loading terms…</div>;
   return (
-    <InfoLayout title={data.title} updated={data.updated}>
+    <InfoLayout title={data.title} updated={data.updated} path="/terms" description="DevaMart terms & conditions covering orders, delivery, returns, authenticity and payments.">
       <div className="prose">
         {data.sections.map(([h, body], i) => (
           <section key={i}>

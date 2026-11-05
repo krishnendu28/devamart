@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, getSocket } from '../api';
 import ProductCard from '../components/ProductCard';
 import Icon from '../components/Icons';
+import Seo from '../components/Seo';
 
 const CATEGORY_PHOTOS = {
   'puja-samagri-kits': 'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7b/Hindu_pooja_thali.jpg/960px-Hindu_pooja_thali.jpg',
@@ -61,8 +62,14 @@ export default function Shop() {
 
   const activeCat = categories.find(c => c.slug === category);
 
+  const seoTitle = category ? `${activeCat?.name || 'Products'} — Buy Online` : q ? `Search: ${q}` : 'Shop All Puja Products';
+  const seoDesc = category
+    ? `Shop authentic ${activeCat?.name || 'puja products'} at DevaMart. Verified quality, COD & UPI, free delivery above ₹499 across India.`
+    : 'Browse puja kits, idols, rudraksha malas, yantras and healing crystals. Authentic products, COD & UPI, live order tracking.';
+
   return (
     <div className="page shop-page">
+      <Seo title={seoTitle} description={seoDesc} path={category ? `/shop?category=${category}` : '/shop'} />
       <div className="section-title">
         <div>
           <h2>{category ? activeCat?.name || 'Products' : q ? `Results for "${q}"` : 'All Products'}</h2>

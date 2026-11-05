@@ -9,6 +9,7 @@ const { Server } = require('socket.io');
 const db = require('./db');
 const { svgPlaceholder } = require('./images');
 const { verifyToken } = require('./auth');
+const { securityHeaders, corsOrigin, rateLimit } = require('./security');
 
 // On serverless (Vercel) the SQLite file is in ephemeral storage — seed it fresh when empty.
 try { require('./seed').autoSeedIfEmpty(); } catch (e) { console.error('auto-seed check failed', e); }
@@ -18,14 +19,22 @@ const server = http.createServer(app);
 
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || '')
   .split(',').map(s => s.trim()).filter(Boolean);
+const originCheck = corsOrigin(CORS_ORIGINS);
 
 const io = new Server(server, {
-  cors: { origin: CORS_ORIGINS.length ? CORS_ORIGINS : true, methods: ['GET', 'POST'] },
+  cors: { origin: originCheck, methods: ['GET', 'POST'] },
+  maxHttpBufferSize: 1e6,
 });
 
 app.set('io', io);
-app.use(cors({ origin: CORS_ORIGINS.length ? CORS_ORIGINS : true }));
-app.use(express.json({ limit: '2mb' }));
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(securityHeaders);
+app.use(cors({ origin: originCheck, methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'], maxAge: 86400 }));
+app.use(express.json({ limit: '512kb' }));
+
+// Broad abuse guard; credential endpoints have their own stricter limiter.
+app.use('/api', rateLimit({ windowMs: 60 * 1000, max: 600, message: 'Too many requests. Please slow down.' }));
 
 // ---------- Generated placeholder images (works offline, zero external calls) ----------
 app.get('/images/placeholder/:id.svg', (req, res) => {
@@ -45,6 +54,7 @@ app.get('/images/placeholder/:id.svg', (req, res) => {
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'DevaMart API', time: new Date().toISOString() }));
 
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/addresses', require('./routes/addresses'));
 app.use('/api', require('./routes/products'));
 app.use('/api/cart', require('./routes/cart'));
 app.use('/api/orders', require('./routes/orders'));
@@ -89,6 +99,12 @@ io.on('connection', (socket) => {
 
 // ---------- Error handler ----------
 app.use((err, req, res, next) => {
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return res.status(413).json({ error: 'Request is too large' });
+  }
+  if (err && (err.type === 'entity.parse.failed' || err.status === 400)) {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
   console.error(err);
   res.status(500).json({ error: 'Something went wrong on our side. Please try again.' });
 });

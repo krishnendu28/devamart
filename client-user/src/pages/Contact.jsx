@@ -26,7 +26,7 @@ export default function Contact() {
   if (loading) return <div className="loading">Loading contact…</div>;
 
   return (
-    <InfoLayout title={data.title}>
+    <InfoLayout title={data.title} path="/contact" description="Contact DevaMart for order help, product questions and WhatsApp support at +91 90381 50556.">
       <div className="detail two">
         <div className="prose" style={{ padding: 24 }}>
           <h3 style={{ marginTop: 0 }}>Get in touch</h3>

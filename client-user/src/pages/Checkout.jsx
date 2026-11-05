@@ -1,12 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, money } from '../api';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { toast } from '../components/Toast';
+import CitySelect from '../components/CitySelect';
+import { getSavedCity, saveCity } from '../data/cityPref';
+import { stateForCity } from '../data/cities';
 import Icon from '../components/Icons';
 
-const emptyAddress = { name: '', phone: '', line: '', city: '', state: '', pincode: '' };
+const emptyAddress = { name: '', phone: '', line: '', line2: '', city: '', state: '', pincode: '' };
+const ADDRESS_KEY = 'dm_checkout_address';
+
+function savedAddress() {
+  try { return JSON.parse(localStorage.getItem(ADDRESS_KEY) || 'null'); } catch (e) { return null; }
+}
 
 const PAY_OPTIONS = [
   { key: 'cod', label: 'Cash on Delivery', sub: 'Pay when it arrives', ic: 'banknote', method: 'cod' },
@@ -19,17 +27,58 @@ export default function Checkout() {
   const { cart } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [address, setAddress] = useState({ ...emptyAddress, name: user?.name || '', phone: user?.phone || '' });
+  const memory = savedAddress();
+  const [address, setAddress] = useState({
+    ...emptyAddress,
+    name: memory?.name || user?.name || '',
+    phone: memory?.phone || user?.phone || '',
+    line: memory?.line || '',
+    line2: memory?.line2 || '',
+    city: memory?.city || user?.city || getSavedCity() || '',
+    state: memory?.state || stateForCity(memory?.city || user?.city || getSavedCity() || '') || '',
+    pincode: memory?.pincode || '',
+  });
   const [pay, setPay] = useState('cod');
   const [note, setNote] = useState('');
   const [placing, setPlacing] = useState(false);
   const [err, setErr] = useState('');
+  const [saved, setSaved] = useState([]);
+  const [saveForLater, setSaveForLater] = useState(true);
+  const [selectedId, setSelectedId] = useState(null);
 
   const paymentMethod = PAY_OPTIONS.find(p => p.key === pay)?.method || 'cod';
   const shipping = cart.total >= 499 ? 0 : 49;
   const grand = cart.total + shipping;
 
+  useEffect(() => {
+    api('/api/addresses').then(setSaved).catch(() => {});
+  }, []);
+
   function set(field, value) { setAddress(a => ({ ...a, [field]: value })); }
+
+  function setCity(city, state) {
+    setAddress(a => ({ ...a, city, state: state === undefined ? a.state : state }));
+    setSelectedId(null);
+  }
+
+  function useSaved(a) {
+    setSelectedId(a.id);
+    setAddress({
+      name: a.name, phone: a.phone, line: a.line, line2: a.line2 || '',
+      city: a.city, state: a.state, pincode: a.pincode,
+    });
+    saveCity(a.city);
+    toast(`Using ${a.label || 'saved'} address`);
+  }
+
+  async function removeSaved(a) {
+    try {
+      await api(`/api/addresses/${a.id}`, { method: 'DELETE' });
+      setSaved(list => list.filter(x => x.id !== a.id));
+      if (selectedId === a.id) setSelectedId(null);
+      toast('Address removed');
+    } catch (e) { toast(e.message); }
+  }
 
   async function placeOrder() {
     setErr('');
@@ -40,6 +89,17 @@ export default function Checkout() {
     }
     setPlacing(true);
     try {
+      // Save the address (and remember the city) before placing so the customer
+      // can reuse it next time. Failures here must never block checkout.
+      saveCity(address.city);
+      try { localStorage.setItem(ADDRESS_KEY, JSON.stringify(address)); } catch (e) { /* ignore */ }
+      if (saveForLater && !selectedId) {
+        try {
+          const d = await api('/api/addresses', { method: 'POST', body: { ...address, label: 'Home' } });
+          if (d && d.address) setSelectedId(d.address.id);
+        } catch (e) { /* non-critical */ }
+      }
+
       const d = await api('/api/orders', { method: 'POST', body: { address, paymentMethod, upiApp: pay === 'cod' ? undefined : pay, note } });
       toast(`Order ${d.order.order_no} placed!`);
       if (paymentMethod === 'online') {
@@ -63,17 +123,45 @@ export default function Checkout() {
       <div className="section-title"><h2>Checkout</h2></div>
       <div className="cart-layout">
         <div className="prose" style={{ padding: 22 }}>
-          <h3 style={{ marginTop: 0 }}><Icon name="pin" size={18} /> Delivery Address</h3>
+          {saved.length > 0 && (
+            <div className="saved-block">
+              <h3 style={{ marginTop: 0 }}><Icon name="pin" size={18} /> Saved Addresses</h3>
+              <div className="saved-grid">
+                {saved.map(a => (
+                  <div key={a.id} className={`saved-card ${selectedId === a.id ? 'on' : ''}`}>
+                    <button type="button" className="saved-pick" onClick={() => useSaved(a)}>
+                      <b>{a.label || 'Home'} · {a.name}</b>
+                      <span>{a.line}{a.line2 ? `, ${a.line2}` : ''}</span>
+                      <span>{a.city}, {a.state} — {a.pincode}</span>
+                      <span className="small muted">{a.phone}</span>
+                    </button>
+                    <button type="button" className="saved-del" title="Delete address" onClick={() => removeSaved(a)}>✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <h3 style={{ marginTop: saved.length ? 18 : 0 }}><Icon name="pin" size={18} /> Delivery Address</h3>
           <div className="field-row">
-            <div className="field"><label>Full Name</label><input value={address.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Ramesh Kumar" /></div>
-            <div className="field"><label>Mobile Number</label><input value={address.phone} onChange={e => set('phone', e.target.value)} placeholder="10-digit mobile" maxLength={10} /></div>
+            <div className="field"><label>Full Name</label><input value={address.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Ramesh Kumar" autoComplete="name" /></div>
+            <div className="field"><label>Mobile Number</label><input value={address.phone} onChange={e => set('phone', e.target.value)} placeholder="10-digit mobile" inputMode="numeric" maxLength={10} autoComplete="tel" /></div>
           </div>
-          <div className="field"><label>Address (House / Flat, Street, Area — one line)</label><input value={address.line} onChange={e => set('line', e.target.value)} placeholder="Flat 12, Temple Street, Near Shani Mandir" /></div>
+          <div className="field"><label>Address line 1 <span className="small muted">(house / flat, street, area)</span></label><input value={address.line} onChange={e => set('line', e.target.value)} placeholder="Flat 12, Temple Street, Near Shani Mandir" autoComplete="address-line1" /></div>
+          <div className="field"><label>Address line 2 <span className="small muted">(optional — landmark, apartment, floor)</span></label><input value={address.line2} onChange={e => set('line2', e.target.value)} placeholder="Near Ganesh Temple, 2nd floor" autoComplete="address-line2" /></div>
           <div className="field-row">
-            <div className="field"><label>City</label><input value={address.city} onChange={e => set('city', e.target.value)} placeholder="Bengaluru" /></div>
-            <div className="field"><label>State</label><input value={address.state} onChange={e => set('state', e.target.value)} placeholder="Karnataka" /></div>
+            <div className="field">
+              <label>City</label>
+              <CitySelect value={address.city} onChange={setCity} required id="checkout-city" />
+            </div>
+            <div className="field"><label>State</label><input value={address.state} onChange={e => set('state', e.target.value)} placeholder="Karnataka" autoComplete="address-level1" /></div>
           </div>
-          <div className="field" style={{ maxWidth: 220 }}><label>PIN Code</label><input value={address.pincode} onChange={e => set('pincode', e.target.value)} placeholder="560001" maxLength={6} /></div>
+          <div className="field" style={{ maxWidth: 220 }}><label>PIN Code</label><input value={address.pincode} onChange={e => set('pincode', e.target.value.replace(/\D/g, ''))} placeholder="560001" inputMode="numeric" maxLength={6} autoComplete="postal-code" /></div>
+
+          <label className="save-address-toggle">
+            <input type="checkbox" checked={saveForLater} onChange={e => setSaveForLater(e.target.checked)} />
+            <span><Icon name="check" size={15} /> Save this address for faster checkout next time</span>
+          </label>
 
           <h3><Icon name="card" size={18} /> Payment Method</h3>
           <div className="gateways" style={{ maxWidth: 520 }}>

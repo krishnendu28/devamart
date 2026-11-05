@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const { cleanText, normalizeEmail, normalizePhone, isValidEmail, rateLimit } = require('../security');
 
 const router = express.Router();
 
@@ -68,11 +69,16 @@ router.get('/contact', (req, res) => {
   });
 });
 
-router.post('/contact', (req, res) => {
+router.post('/contact', rateLimit({ windowMs: 60 * 60 * 1000, max: 8 }), (req, res) => {
   const { name, email, phone, message } = req.body || {};
-  if (!name || !message) return res.status(400).json({ error: 'Name and message are required' });
+  const cleanName = cleanText(name, 80);
+  const cleanMessage = String(message || '').trim().slice(0, 4000);
+  const cleanEmail = normalizeEmail(email).slice(0, 254);
+  const cleanPhone = normalizePhone(phone);
+  if (!cleanName || !cleanMessage) return res.status(400).json({ error: 'Name and message are required' });
+  if (cleanEmail && !isValidEmail(cleanEmail)) return res.status(400).json({ error: 'Please enter a valid email address' });
   db.prepare('INSERT INTO contact_messages (name, email, phone, message) VALUES (?,?,?,?)')
-    .run(name.trim(), email || null, phone || null, String(message).slice(0, 4000));
+    .run(cleanName, cleanEmail || null, cleanPhone || null, cleanMessage);
   res.status(201).json({ ok: true, message: 'Thank you! Our team will get back to you within one working day.' });
 });
 

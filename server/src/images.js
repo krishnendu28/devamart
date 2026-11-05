@@ -201,6 +201,7 @@ function productToView(p) {
     image: primary,
     images: images.slice(0, 5),
     available: p.available === 0 || p.available === '0' || p.available === false ? 0 : 1,
+    coming_soon: p.coming_soon === 1 || p.coming_soon === '1' || p.coming_soon === true ? 1 : 0,
   };
   if (p.checklist != null && p.checklist !== '') view.checklist = typeof p.checklist === 'string' ? parseJson(p.checklist) : p.checklist;
   if (p.instructions != null && p.instructions !== '') view.instructions = typeof p.instructions === 'string' ? parseJson(p.instructions) : p.instructions;

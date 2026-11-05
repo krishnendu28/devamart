@@ -27,6 +27,7 @@ export default function ProductCard({ product }) {
 
   const fav = has(product.id);
   const unavailable = product.available === 0;
+  const comingSoon = product.coming_soon === 1;
   const soldOut = product.stock === 0;
 
   // Realtime image/price changes from the admin panel.
@@ -45,6 +46,7 @@ export default function ProductCard({ product }) {
     e.preventDefault();
     e.stopPropagation();
     if (unavailable) { toast('This product is currently unavailable'); return; }
+    if (comingSoon) { toast('This product is coming soon'); return; }
     if (soldOut) { toast('Out of stock right now'); return; }
     if (!user) { toast('Please login to add items to cart'); navigate('/login'); return; }
     add(product.id, 1).then(ok => { if (ok) toast(`Added to cart · ${product.name}`); });
@@ -62,12 +64,13 @@ export default function ProductCard({ product }) {
         ><Icon name="heart" size={17} /></button>
         {product.featured ? <span className="tag">Bestseller</span> : null}
         {off >= 20 ? <span className="tag sale">{off}% OFF</span> : null}
+        {comingSoon ? <span className="tag cs">Coming Soon</span> : null}
       </div>
       <div className="body">
         <span className="cat">{product.category_name || product.category}</span>
         <h3>{product.name}</h3>
-        {product.stock === 0 || unavailable ? (
-          <span className="stock-out">{unavailable ? 'Unavailable' : 'Out of stock'}</span>
+        {product.stock === 0 || unavailable || comingSoon ? (
+          <span className="stock-out">{comingSoon ? 'Coming Soon' : unavailable ? 'Unavailable' : 'Out of stock'}</span>
         ) : (
           <div className="price-row">
             <span className="price">{money(product.price)}</span>
@@ -75,8 +78,8 @@ export default function ProductCard({ product }) {
             {off > 0 && <span className="off">save {off}%</span>}
           </div>
         )}
-        <button className="btn add-btn" disabled={busy || soldOut || unavailable} onClick={onAdd}>
-          {busy ? 'Adding…' : unavailable ? 'Unavailable' : soldOut ? 'Sold out' : '+ Add to Cart'}
+        <button className="btn add-btn" disabled={busy || soldOut || unavailable || comingSoon} onClick={onAdd}>
+          {busy ? 'Adding…' : comingSoon ? 'Coming Soon' : unavailable ? 'Unavailable' : soldOut ? 'Sold out' : '+ Add to Cart'}
         </button>
       </div>
     </Link>

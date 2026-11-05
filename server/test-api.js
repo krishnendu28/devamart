@@ -39,7 +39,7 @@ async function req(method, url, { token, body } = {}) {
   let data = null;
   const text = await res.text();
   try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
-  return { status: res.status, data, contentType: res.headers.get('content-type') };
+  return { status: res.status, data, contentType: res.headers.get('content-type'), headers: res.headers };
 }
 
 function section(t) { console.log(`\n${t}`); }
@@ -63,6 +63,17 @@ async function main() {
   section('Health & catalogue');
   const health = await req('GET', '/api/health');
   ok('GET /api/health', health.status === 200 && health.data.ok === true, health.data);
+  ok('security headers on API responses',
+    health.headers.get('x-content-type-options') === 'nosniff' &&
+    health.headers.get('x-frame-options') === 'DENY' &&
+    !!health.headers.get('content-security-policy') &&
+    !!health.headers.get('strict-transport-security'));
+  ok('API responses are not cached', health.headers.get('cache-control') === 'no-store', health.headers.get('cache-control'));
+
+  const corsBad = await fetch(`${BASE}/api/health`, { headers: { Origin: 'https://evil.example' } });
+  ok('CORS rejects unknown origins', !corsBad.headers.get('access-control-allow-origin'), corsBad.headers.get('access-control-allow-origin'));
+  const corsGood = await fetch(`${BASE}/api/health`, { headers: { Origin: 'https://devamart-shop.vercel.app' } });
+  ok('CORS allows the storefront origin', corsGood.headers.get('access-control-allow-origin') === 'https://devamart-shop.vercel.app', corsGood.headers.get('access-control-allow-origin'));
 
   const cats = await req('GET', '/api/categories');
   ok('GET /api/categories returns 5 categories', cats.status === 200 && cats.data.length === 5, cats.data.length);
@@ -94,25 +105,39 @@ async function main() {
   ok('placeholder SVG generated', img.status === 200 && imgText.includes('<svg') && imgText.includes('DevaMart'));
 
   section('Auth');
-  const signup = await req('POST', '/api/auth/signup', { body: { name: 'Test Bhakt', email: `test${stamp}@devamart.in`, phone: '9876543210', password: 'Test@1234' } });
-  ok('POST /api/auth/signup', signup.status === 201 && !!signup.data.token, signup.data);
+  const rawEmail = `Test${stamp}@Gmail.com`;
+  const userEmail = rawEmail.toLowerCase();
+  const signup = await req('POST', '/api/auth/signup', { body: { name: 'Test Bhakt', email: rawEmail, phone: '9876543210', city: 'Bengaluru', password: 'Test@1234' } });
+  ok('POST /api/auth/signup (Gmail address)', signup.status === 201 && !!signup.data.token, signup.data);
+  ok('signup normalises email to lowercase', signup.data.user.email === userEmail, signup.data.user.email);
+  ok('signup stores the city', signup.data.user.city === 'Bengaluru', signup.data.user.city);
   const userToken = (signup.data && signup.data.token) || '';
-  const userEmail = `test${stamp}@devamart.in`;
 
-  const dupe = await req('POST', '/api/auth/signup', { body: { name: 'X', email: userEmail, password: 'Test@1234' } });
-  ok('duplicate email rejected 409', dupe.status === 409);
+  const dupe = await req('POST', '/api/auth/signup', { body: { name: 'X', email: userEmail.toUpperCase(), password: 'Test@1234' } });
+  ok('duplicate email rejected 409 (case-insensitive)', dupe.status === 409);
 
   const badSignup = await req('POST', '/api/auth/signup', { body: { name: '', email: 'bad', password: '123' } });
   ok('invalid signup rejected 400', badSignup.status === 400);
 
-  const login = await req('POST', '/api/auth/login', { body: { email: userEmail, password: 'Test@1234' } });
-  ok('POST /api/auth/login', login.status === 200 && !!login.data.token, login.data);
+  const login = await req('POST', '/api/auth/login', { body: { email: `  ${userEmail.toUpperCase()}  `, password: 'Test@1234' } });
+  ok('POST /api/auth/login (email trim + case-insensitive)', login.status === 200 && !!login.data.token, login.data);
 
   const badLogin = await req('POST', '/api/auth/login', { body: { email: userEmail, password: 'wrong' } });
   ok('wrong password rejected 401', badLogin.status === 401);
 
   const me = await req('GET', '/api/auth/me', { token: userToken });
   ok('GET /api/auth/me', me.status === 200 && me.data.user.email === userEmail);
+  ok('me exposes city + last login tracking', me.data.user.city === 'Bengaluru' && !!me.data.user.last_login_at && me.data.user.login_count >= 1, me.data.user);
+
+  const patchNoAuth = await req('PATCH', '/api/auth/me', { body: { city: 'Mumbai' } });
+  ok('PATCH /api/auth/me requires login', patchNoAuth.status === 401);
+  const patchBad = await req('PATCH', '/api/auth/me', { token: userToken, body: { city: '' } });
+  ok('PATCH /api/auth/me rejects an empty city', patchBad.status === 400);
+  const patchCity = await req('PATCH', '/api/auth/me', { token: userToken, body: { city: 'Mumbai' } });
+  ok('PATCH /api/auth/me updates the delivery city', patchCity.status === 200 && patchCity.data.user.city === 'Mumbai', patchCity.data);
+  const meAfterPatch = await req('GET', '/api/auth/me', { token: userToken });
+  ok('updated city persists for the session', meAfterPatch.data.user.city === 'Mumbai', meAfterPatch.data.user.city);
+  await req('PATCH', '/api/auth/me', { token: userToken, body: { city: 'Bengaluru' } });
 
   section('Authorization boundaries (security)');
   const noToken = await req('GET', '/api/cart');
@@ -133,6 +158,27 @@ async function main() {
 
   const adminHitsMe = await req('GET', '/api/auth/me', { token: adminToken });
   ok('admin /me role=admin', adminHitsMe.status === 200 && adminHitsMe.data.user.role === 'admin');
+
+  section('Saved addresses');
+  const addressBody = {
+    label: 'Home', name: 'Test Bhakt', phone: '9876543210',
+    line: '12 Temple Street, Near Mandir', line2: '2nd floor, Ganesh Apartments',
+    city: 'Bengaluru', state: 'Karnataka', pincode: '560001',
+  };
+  const addrNoAuth = await req('GET', '/api/addresses');
+  ok('saved addresses require login', addrNoAuth.status === 401);
+  const savedAddr = await req('POST', '/api/addresses', { token: userToken, body: addressBody });
+  ok('POST /api/addresses saves address (with line 2)', savedAddr.status === 201 && savedAddr.data.address.line2 === '2nd floor, Ganesh Apartments', savedAddr.data);
+  const addrList = await req('GET', '/api/addresses', { token: userToken });
+  ok('GET /api/addresses lists saved address', addrList.status === 200 && addrList.data.length === 1, addrList.data);
+  const addrDup = await req('POST', '/api/addresses', { token: userToken, body: addressBody });
+  ok('duplicate address is not saved twice', addrDup.status === 200 && addrDup.data.duplicate === true, addrDup.data);
+  const addrBad = await req('POST', '/api/addresses', { token: userToken, body: { name: 'x', pincode: '12' } });
+  ok('incomplete saved address rejected 400', addrBad.status === 400);
+  const addrDel = await req('DELETE', `/api/addresses/${savedAddr.data.address.id}`, { token: userToken });
+  ok('DELETE /api/addresses/:id', addrDel.status === 200);
+  const addrListAfter = await req('GET', '/api/addresses', { token: userToken });
+  ok('address removed from list', addrListAfter.data.length === 0);
 
   section('Cart');
   const add1 = await req('POST', '/api/cart', { token: userToken, body: { productId: prods.data[0].id, qty: 2 } });
@@ -162,10 +208,11 @@ async function main() {
   await wait(400);
 
   section('Orders (COD)');
-  const address = { name: 'Test Bhakt', phone: '9876543210', line: '12 Temple Street, Near Mandir, Bengaluru', city: 'Bengaluru', state: 'Karnataka', pincode: '560001' };
+  const address = { name: 'Test Bhakt', phone: '9876543210', line: '12 Temple Street, Near Mandir, Bengaluru', line2: '2nd floor, Ganesh Apartments', city: 'Bengaluru', state: 'Karnataka', pincode: '560001' };
   const codOrder = await req('POST', '/api/orders', { token: userToken, body: { address, paymentMethod: 'cod', note: 'Please deliver after 6 PM' } });
   ok('POST /api/orders COD', codOrder.status === 201 && codOrder.data.order.order_no.startsWith('DM'), codOrder.data);
   const codId = codOrder.data.order.id;
+  ok('order keeps address line 2', codOrder.data.order.address.line2 === '2nd floor, Ganesh Apartments', codOrder.data.order.address);
   ok('COD order payment_status pending', codOrder.data.order.payment_status === 'pending');
   ok('customer note saved on order', codOrder.data.order.note === 'Please deliver after 6 PM', codOrder.data.order);
   ok('order created with ready-for-dispatch status flow', codOrder.data.order.status === 'placed');
@@ -253,6 +300,11 @@ async function main() {
   ok('stats monthly orders + unread messages present', typeof stats.data.month_orders === 'number' && typeof stats.data.unread_messages === 'number');
   ok('stats by_status includes ready', typeof stats.data.by_status.ready === 'number', stats.data.by_status);
   ok('stats by_category present', Array.isArray(stats.data.by_category) && stats.data.by_category.length === 5);
+  ok('daily revenue is locked for the IST day', stats.data.daily_locked === true && !!stats.data.locked_day && !!stats.data.locked_at, { locked_day: stats.data.locked_day, locked_at: stats.data.locked_at });
+  ok('locked day matches IST today', /^\d{4}-\d{2}-\d{2}$/.test(stats.data.locked_day), stats.data.locked_day);
+  ok('live revenue exposed alongside the locked value', typeof stats.data.revenue_today_live === 'number', stats.data.revenue_today_live);
+  const statsAgain = await req('GET', '/api/admin/stats', { token: adminToken });
+  ok('refreshing stats keeps daily revenue unchanged', statsAgain.data.revenue_today === stats.data.revenue_today, { first: stats.data.revenue_today, second: statsAgain.data.revenue_today });
 
   const adminOrders = await req('GET', '/api/admin/orders', { token: adminToken });
   ok('GET /api/admin/orders', adminOrders.status === 200 && adminOrders.data.length >= 2);
@@ -323,6 +375,27 @@ async function main() {
   await req('DELETE', `/api/admin/products/${multiId}`, { token: adminToken });
   await req('DELETE', `/api/admin/products/${many.data.product.id}`, { token: adminToken });
 
+  section('Coming Soon products');
+  const csProduct = await req('POST', '/api/admin/products', {
+    token: adminToken,
+    body: { name: 'Upcoming Brass Idol', price: 1499, mrp: 1999, category_id: catId, description: 'Launching soon', stock: 10, available: 1, coming_soon: 1 },
+  });
+  const csId = csProduct.data && csProduct.data.product && csProduct.data.product.id;
+  ok('admin creates a Coming Soon product', csProduct.status === 201 && csProduct.data.product.coming_soon === 1, csProduct.data);
+  const csList = await req('GET', '/api/products?category=' + catsAdmin.data[0].slug);
+  ok('Coming Soon product hidden from public list', csList.status === 200 && !csList.data.some(p => p.id === csId));
+  const csDetail = await req('GET', `/api/products/${csId}`);
+  ok('Coming Soon product detail exposes the flag', csDetail.status === 200 && csDetail.data.coming_soon === 1, csDetail.data);
+  const csAdd = await req('POST', '/api/cart', { token: userToken, body: { productId: csId, qty: 1 } });
+  ok('cannot add a Coming Soon product to the cart', csAdd.status === 400, csAdd.data);
+  const csStats = await req('GET', '/api/admin/stats', { token: adminToken });
+  ok('admin stats counts Coming Soon products', csStats.data.coming_soon_products >= 1, csStats.data.coming_soon_products);
+  const csLaunch = await req('PATCH', `/api/admin/products/${csId}`, { token: adminToken, body: { coming_soon: 0 } });
+  ok('admin can launch a Coming Soon product', csLaunch.status === 200 && csLaunch.data.product.coming_soon === 0, csLaunch.data);
+  const csListLive = await req('GET', '/api/products?category=' + catsAdmin.data[0].slug);
+  ok('launched product returns to the public list', csListLive.data.some(p => p.id === csId));
+  await req('DELETE', `/api/admin/products/${csId}`, { token: adminToken });
+
   const newCat = await req('POST', '/api/admin/categories', { token: adminToken, body: { name: 'Test Category', icon: '🌸' } });
   ok('POST /api/admin/categories', newCat.status === 201 && newCat.data.category.id);
   const patchedCat = await req('PATCH', `/api/admin/categories/${newCat.data.category.id}`, { token: adminToken, body: { name: 'Test Category Renamed' } });
@@ -331,6 +404,8 @@ async function main() {
   section('Customers');
   const customers = await req('GET', '/api/admin/customers', { token: adminToken });
   ok('GET /api/admin/customers', customers.status === 200 && customers.data.some(c => c.email === userEmail));
+  const testCustomer = customers.data.find(c => c.email === userEmail);
+  ok('customer list shows city + last login', !!testCustomer && testCustomer.city === 'Bengaluru' && !!testCustomer.last_login_at && testCustomer.login_count >= 1, testCustomer);
 
   section('Chatbot');
   const welcome = await req('GET', '/api/chat/welcome');
@@ -345,6 +420,8 @@ async function main() {
   ok('chat fallback for unknown', chat4.status === 200 && chat4.data.intent === 'fallback');
   const chatBad = await req('POST', '/api/chat', { body: { message: '' } });
   ok('empty chat message -> 400', chatBad.status === 400);
+  const chatHuge = await req('POST', '/api/chat', { body: { message: 'x'.repeat(600000) } });
+  ok('oversized JSON payload rejected 413', chatHuge.status === 413, chatHuge.status);
 
   section('Content pages');
   const terms = await req('GET', '/api/content/terms');

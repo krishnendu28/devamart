@@ -28,9 +28,14 @@ export function AuthProvider({ children }) {
     setToken(d.token); setUser(d.user); setUserState(d.user);
     return d.user;
   }
+  async function updateProfile(payload) {
+    const d = await api('/api/auth/me', { method: 'PATCH', body: payload });
+    setUser(d.user); setUserState(d.user);
+    return d.user;
+  }
   function logout() { setToken(null); setUser(null); setUserState(null); }
 
-  return <AuthContext.Provider value={{ user, ready, login, signup, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, ready, login, signup, updateProfile, logout }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

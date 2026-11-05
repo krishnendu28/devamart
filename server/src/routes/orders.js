@@ -2,6 +2,8 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth } = require('../middleware');
 const { productToView, resolveImage } = require('../images');
+const { cleanText, normalizePhone } = require('../security');
+const { refreshDailyTotals } = require('../daily');
 
 const router = express.Router();
 
@@ -44,7 +46,17 @@ function emit(io, event, payload) {
 // POST /api/orders  -> create order from user's cart
 router.post('/', requireAuth('user'), (req, res) => {
   const { address, paymentMethod, note, upiApp } = req.body || {};
-  if (!address || !address.name || !address.phone || !address.line || !address.city || !address.state || !address.pincode) {
+  const raw = address || {};
+  const cleanAddress = {
+    name: cleanText(raw.name, 80),
+    phone: normalizePhone(raw.phone),
+    line: cleanText(raw.line, 180),
+    line2: cleanText(raw.line2, 180),
+    city: cleanText(raw.city, 60),
+    state: cleanText(raw.state, 60),
+    pincode: String(raw.pincode || '').replace(/\D/g, '').slice(0, 6),
+  };
+  if (!cleanAddress.name || !cleanAddress.phone || !cleanAddress.line || !cleanAddress.city || !cleanAddress.state || !/^\d{6}$/.test(cleanAddress.pincode)) {
     return res.status(400).json({ error: 'Complete delivery address is required' });
   }
   if (!['cod', 'online'].includes(paymentMethod)) {
@@ -62,9 +74,10 @@ router.post('/', requireAuth('user'), (req, res) => {
 
   if (!cartRows.length) return res.status(400).json({ error: 'Your cart is empty' });
 
-  const unavailable = cartRows.filter(r => Number(r.available) === 0);
+  const unavailable = cartRows.filter(r => Number(r.available) === 0 || Number(r.coming_soon) === 1);
   if (unavailable.length) {
-    return res.status(400).json({ error: `Currently unavailable: ${unavailable.map(r => r.name).join(', ')}. Please remove ${unavailable.length > 1 ? 'them' : 'it'} from your cart to continue.` });
+    const names = unavailable.map(r => r.name).join(', ');
+    return res.status(400).json({ error: `Currently unavailable or coming soon: ${names}. Please remove ${unavailable.length > 1 ? 'them' : 'it'} from your cart to continue.` });
   }
 
   const items = cartRows.map(r => ({
@@ -81,7 +94,7 @@ router.post('/', requireAuth('user'), (req, res) => {
       INSERT INTO orders (order_no, user_id, items, subtotal, shipping, total, address, payment_method, payment_status, status, note)
       VALUES (?,?,?,?,?,?,?,?,?, 'placed', ?)
     `).run(orderNo, req.user.id, JSON.stringify(items), subtotal, shipping, total,
-      JSON.stringify(address), paymentMethod, 'pending', cleanNote);
+      JSON.stringify(cleanAddress), paymentMethod, 'pending', cleanNote);
 
     const dec = db.prepare('UPDATE products SET stock = MAX(0, stock - ?) WHERE id=?');
     for (const r of cartRows) dec.run(r.qty, r.id);
@@ -95,6 +108,7 @@ router.post('/', requireAuth('user'), (req, res) => {
   });
 
   const orderId = insert();
+  try { refreshDailyTotals(); } catch (e) { /* daily lock is best-effort */ }
   const order = orderView(db.prepare('SELECT * FROM orders WHERE id=?').get(orderId));
 
   const io = req.app.get('io');

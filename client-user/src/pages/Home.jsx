@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, getSocket, money } from '../api';
 import ProductCard from '../components/ProductCard';
 import Icon from '../components/Icons';
+import Seo, { SITE_URL } from '../components/Seo';
 import { toast } from '../components/Toast';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -159,6 +160,21 @@ export default function Home() {
 
   return (
     <div className="page home-page">
+      <Seo
+        path="/"
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@type': 'OnlineStore',
+          name: 'DevaMart',
+          url: SITE_URL,
+          logo: `${SITE_URL}/logo.jpeg`,
+          description: 'Authentic puja kits, idols, rudraksha and healing crystals delivered across India.',
+          telephone: '+91-90381-50556',
+          areaServed: 'IN',
+          paymentAccepted: 'Cash on Delivery, UPI, Google Pay, PhonePe',
+          sameAs: [`https://wa.me/919038150556`],
+        }}
+      />
       <section className="container">
         <div className="hero">
           <div className="slides" style={{ transform: `translateX(-${slide * 100}%)` }}>

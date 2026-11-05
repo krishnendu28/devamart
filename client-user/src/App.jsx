@@ -3,6 +3,8 @@ import { Routes, Route, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ChatBot from './components/ChatBot';
+import FloatingCart from './components/FloatingCart';
+import WhatsAppButton from './components/WhatsAppButton';
 import Toaster from './components/Toast';
 import Protected from './components/Protected';
 
@@ -61,6 +63,8 @@ export default function App() {
         </Routes>
       </main>
       <Footer />
+      <FloatingCart />
+      <WhatsAppButton />
       <ChatBot />
       <Toaster />
     </>
