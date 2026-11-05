@@ -29,6 +29,9 @@ export async function api(path, { method = 'GET', body, auth = true } = {}) {
 
 export const imgUrl = (p) => (p && p.image ? p.image : '');
 
+/** Locally generated fallback so a throttled/stock image never leaves a blank tile. */
+export const placeholderUrl = (id) => `${API}/images/placeholder/${id || 0}.svg`;
+
 let sharedSocket = null;
 
 export function connectSocket(token) {

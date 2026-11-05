@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, money } from '../api';
+import { api, money, placeholderUrl } from '../api';
 import { connectSocket } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { getToken } from '../api';
@@ -59,7 +59,7 @@ export default function Orders() {
               </div>
               <div className="row between wrap">
                 <div className="row mini-thumbs">
-                  {o.items.slice(0, 4).map((it, i) => <img key={i} src={it.image} alt={it.name} title={it.name} />)}
+                  {o.items.slice(0, 4).map((it, i) => <img key={i} src={it.image} alt={it.name} title={it.name} onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = placeholderUrl(it.product_id || it.id); }} />)}
                   {o.items.length > 4 && <span className="muted" style={{ fontStyle: 'italic' }}>+{o.items.length - 4} more</span>}
                 </div>
                 <div className="row">

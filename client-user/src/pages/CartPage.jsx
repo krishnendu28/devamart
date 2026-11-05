@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
-import { money } from '../api';
+import { money, placeholderUrl } from '../api';
 import { toast } from '../components/Toast';
 import CitySelect from '../components/CitySelect';
 import { getSavedCity, saveCity } from '../data/cityPref';
@@ -61,7 +61,7 @@ export default function CartPage() {
         <div>
           {cart.items.map(it => (
             <div className="line-item" key={it.id}>
-              <img src={it.image} alt={it.name} />
+              <img src={it.image} alt={it.name} onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = placeholderUrl(it.product_id || it.id); }} />
               <div>
                 <h4>{it.name}</h4>
                 <span className="small muted">{money(it.price)} each</span>

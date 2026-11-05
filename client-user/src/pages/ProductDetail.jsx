@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { api, getSocket, money } from '../api';
+import { api, getSocket, money, placeholderUrl } from '../api';
 import { useCart } from '../context/CartContext';
 import { useFavorites } from '../context/FavoritesContext';
 import { toast } from '../components/Toast';
@@ -102,7 +102,7 @@ export default function ProductDetail() {
       </nav>
       <div className="detail">
         <div className="gallery">
-          <img src={activeImg || product.image} alt={product.name} />
+          <img src={activeImg || product.image} alt={product.name} onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = placeholderUrl(product.id); }} />
           {(product.images || []).length > 1 && (
             <div className="gallery-thumbs">
               {(product.images || []).map((src, i) => (
@@ -113,7 +113,7 @@ export default function ProductDetail() {
                   onClick={() => setActiveImg(src)}
                   aria-label={`Image ${i + 1}`}
                 >
-                  <img src={src} alt="" />
+                  <img src={src} alt="" onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = placeholderUrl(product.id); }} />
                 </button>
               ))}
             </div>

@@ -1,3 +1,6 @@
 data/
 *.log
 test-api.js
+.env
+.env.*
+.vercel
